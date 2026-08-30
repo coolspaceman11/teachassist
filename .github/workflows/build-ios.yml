@@ -1,0 +1,117 @@
+name: Build TeachAssist+ iOS IPA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout TeachAssist+
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Use Xcode 16.4
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Generate native iOS project
+        run: npx expo prebuild --platform ios --clean --no-install
+
+      - name: Install iOS CocoaPods
+        working-directory: ios
+        run: pod install
+
+      - name: Find Xcode workspace and scheme
+        id: ios
+        shell: bash
+        run: |
+          WORKSPACE=$(find ios -maxdepth 1 -name "*.xcworkspace" -print -quit)
+
+          if [ -z "$WORKSPACE" ]; then
+            echo "ERROR: No Xcode workspace found."
+            exit 1
+          fi
+
+          echo "Found workspace: $WORKSPACE"
+
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -list \
+            -json > /tmp/xcode-list.json
+
+          SCHEME=$(python3 - <<'PY'
+          import json
+
+          with open("/tmp/xcode-list.json", "r") as f:
+              data = json.load(f)
+
+          schemes = data.get("workspace", {}).get("schemes", [])
+
+          if not schemes:
+              raise SystemExit("ERROR: No Xcode schemes found.")
+
+          print(schemes[0])
+          PY
+          )
+
+          echo "Found scheme: $SCHEME"
+
+          echo "workspace=$WORKSPACE" >> "$GITHUB_OUTPUT"
+          echo "scheme=$SCHEME" >> "$GITHUB_OUTPUT"
+
+      - name: Build unsigned iPhone app
+        shell: bash
+        run: |
+          xcodebuild \
+            -workspace "${{ steps.ios.outputs.workspace }}" \
+            -scheme "${{ steps.ios.outputs.scheme }}" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath ios/build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM=""
+
+      - name: Package TeachAssist+ IPA
+        shell: bash
+        run: |
+          APP=$(find ios/build/Build/Products/Release-iphoneos \
+            -maxdepth 1 \
+            -name "*.app" \
+            -print -quit)
+
+          if [ -z "$APP" ]; then
+            echo "ERROR: Built .app was not found."
+            exit 1
+          fi
+
+          echo "Found app: $APP"
+
+          rm -rf Payload
+          mkdir Payload
+          cp -R "$APP" Payload/
+
+          /usr/bin/zip -qry TeachAssistPlus.ipa Payload
+
+          ls -lh TeachAssistPlus.ipa
+
+      - name: Upload TeachAssist+ IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: TeachAssistPlus-iOS
+          path: TeachAssistPlus.ipa
+          if-no-files-found: error
