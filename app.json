@@ -1,16 +1,16 @@
 {
   "expo": {
-    "name": "TeachAssist",
-    "slug": "teachassist",
-    "version": "1.5.3",
+    "name": "TeachAssist+",
+    "slug": "teachassist-plus",
+    "version": "0.1.0",
     "orientation": "default",
     "icon": "./assets/images/playstore-icon-transparent.png",
-    "scheme": "teachassist",
+    "scheme": "teachassistplus",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.prmntr.teachassistapp",
+      "bundleIdentifier": "com.teachassistplus.studentapp",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       },
@@ -22,8 +22,7 @@
         "backgroundColor": "#161616"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.prmntr.teachassist",
-      "playStoreUrl": "https://play.google.com/store/apps/details?id=com.prmntr.teachassist"
+      "package": "com.teachassistplus.studentapp"
     },
     "notification": {
       "icon": "./assets/images/teach-icon-transparent.png",
@@ -48,23 +47,15 @@
       "expo-secure-store",
       "expo-notifications",
       "expo-background-task",
-      "expo-video"
+      "expo-video",
+      "expo-font",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "6e2397fc-f645-446d-ac3a-1db936c657e0"
-      }
-    },
-    "owner": "prmntr",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/6e2397fc-f645-446d-ac3a-1db936c657e0"
+      "router": {}
     }
   }
 }
