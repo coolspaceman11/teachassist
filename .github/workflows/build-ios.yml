@@ -33,40 +33,42 @@ jobs:
         working-directory: ios
         run: pod install
 
-      - name: Find Xcode workspace and scheme
+      - name: Find TeachAssist+ Xcode project
         id: ios
         shell: bash
         run: |
-          WORKSPACE=$(find ios -maxdepth 1 -name "*.xcworkspace" -print -quit)
+          echo "Contents of ios:"
+          ls -la ios
 
-          if [ -z "$WORKSPACE" ]; then
-            echo "ERROR: No Xcode workspace found."
+          PROJECT=$(find ios \
+            -maxdepth 1 \
+            -name "*.xcodeproj" \
+            ! -name "Pods.xcodeproj" \
+            -print -quit)
+
+          WORKSPACE=$(find ios \
+            -maxdepth 1 \
+            -name "*.xcworkspace" \
+            -print -quit)
+
+          if [ -z "$PROJECT" ]; then
+            echo "ERROR: Main Xcode project not found."
             exit 1
           fi
 
-          echo "Found workspace: $WORKSPACE"
+          if [ -z "$WORKSPACE" ]; then
+            echo "ERROR: Xcode workspace not found."
+            exit 1
+          fi
 
-          xcodebuild \
-            -workspace "$WORKSPACE" \
-            -list \
-            -json > /tmp/xcode-list.json
+          SCHEME=$(basename "$PROJECT" .xcodeproj)
 
-          SCHEME=$(python3 - <<'PY'
-          import json
+          echo "Project: $PROJECT"
+          echo "Workspace: $WORKSPACE"
+          echo "App scheme: $SCHEME"
 
-          with open("/tmp/xcode-list.json", "r") as f:
-              data = json.load(f)
-
-          schemes = data.get("workspace", {}).get("schemes", [])
-
-          if not schemes:
-              raise SystemExit("ERROR: No Xcode schemes found.")
-
-          print(schemes[0])
-          PY
-          )
-
-          echo "Found scheme: $SCHEME"
+          echo "Available schemes:"
+          xcodebuild -workspace "$WORKSPACE" -list
 
           echo "workspace=$WORKSPACE" >> "$GITHUB_OUTPUT"
           echo "scheme=$SCHEME" >> "$GITHUB_OUTPUT"
@@ -74,39 +76,64 @@ jobs:
       - name: Build unsigned iPhone app
         shell: bash
         run: |
+          echo "Building scheme: ${{ steps.ios.outputs.scheme }}"
+
           xcodebuild \
             -workspace "${{ steps.ios.outputs.workspace }}" \
             -scheme "${{ steps.ios.outputs.scheme }}" \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            -derivedDataPath ios/build \
+            -derivedDataPath "$GITHUB_WORKSPACE/ios/build" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM=""
 
-      - name: Package TeachAssist+ IPA
+      - name: Locate built iPhone application
+        id: app
         shell: bash
         run: |
-          APP=$(find ios/build/Build/Products/Release-iphoneos \
-            -maxdepth 1 \
+          echo "Searching build output for .app bundles..."
+
+          find "$GITHUB_WORKSPACE/ios/build" \
+            -type d \
             -name "*.app" \
-            -print -quit)
+            -print || true
+
+          APP=$(find "$GITHUB_WORKSPACE/ios/build/Build/Products" \
+            -type d \
+            -name "*.app" \
+            -print \
+            -quit)
 
           if [ -z "$APP" ]; then
-            echo "ERROR: Built .app was not found."
+            echo "ERROR: No .app bundle exists in the Xcode build products."
+            echo "Build products:"
+            find "$GITHUB_WORKSPACE/ios/build/Build/Products" \
+              -maxdepth 4 \
+              -print || true
             exit 1
           fi
 
-          echo "Found app: $APP"
+          echo "Found application:"
+          echo "$APP"
+
+          echo "app_path=$APP" >> "$GITHUB_OUTPUT"
+
+      - name: Package TeachAssist+ IPA
+        shell: bash
+        run: |
+          APP="${{ steps.app.outputs.app_path }}"
 
           rm -rf Payload
-          mkdir Payload
+          mkdir -p Payload
+
           cp -R "$APP" Payload/
 
           /usr/bin/zip -qry TeachAssistPlus.ipa Payload
 
+          echo "Created IPA:"
           ls -lh TeachAssistPlus.ipa
 
       - name: Upload TeachAssist+ IPA
