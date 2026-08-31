@@ -38,6 +38,9 @@ import {
   ThemeTone,
 } from "@/utils/themeSystem";
 
+const PAGE_BACKGROUND_OPACITY_STORAGE_KEY = "page_background_opacity";
+const DEFAULT_PAGE_BACKGROUND_OPACITY = 0.3;
+
 interface ThemeContextType {
   theme: ThemeMode;
   isDark: boolean;
@@ -53,30 +56,46 @@ interface ThemeContextType {
   buildCustomThemeFromImage: (
     imageUri: string,
   ) => Promise<ThemePresetDefinition>;
+  buildCustomThemeFromColor: (
+    accentHex: string,
+  ) => Promise<ThemePresetDefinition>;
   clearCustomTheme: () => Promise<void>;
   activeTone: ThemeTone;
   pageBackgroundImageUri: string | null;
   pageBackgroundEnabled: boolean;
+  pageBackgroundOpacity: number;
   setPageBackgroundEnabled: (enabled: boolean) => Promise<void>;
+  setPageBackgroundOpacity: (opacity: number) => Promise<void>;
   refreshPageBackgroundImage: (imageUri?: string | null) => Promise<void>;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
+
 const FONT_PRESET_IDS = new Set<FontPresetId>(
   FONT_PRESETS.map((preset) => preset.id),
 );
+
+const clampBackgroundOpacity = (value: number) => {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_PAGE_BACKGROUND_OPACITY;
+  }
+
+  return Math.min(Math.max(value, 0.08), 0.65);
+};
 
 const sanitizeStoredSettings = (
   settings: Partial<StoredThemeSettings>,
   fallbackMode: ThemeMode,
 ): StoredThemeSettings => {
   const storedFontPresetId = settings.fontPresetId as string | undefined;
+
   const mode =
     settings.mode === "light"
       ? "light"
       : settings.mode === "dark"
         ? "dark"
         : fallbackMode;
+
   const presetId =
     settings.presetId === "ocean" ||
     settings.presetId === "sunset" ||
@@ -90,11 +109,13 @@ const sanitizeStoredSettings = (
     settings.presetId === "custom"
       ? settings.presetId
       : "default";
+
   const fontPresetId =
     storedFontPresetId &&
     FONT_PRESET_IDS.has(storedFontPresetId as FontPresetId)
       ? (storedFontPresetId as FontPresetId)
       : "system";
+
   const customPreset =
     settings.customPreset && settings.customPreset.id === "custom"
       ? settings.customPreset
@@ -113,6 +134,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const systemTheme = useColorScheme();
   const fallbackMode: ThemeMode = systemTheme === "light" ? "light" : "dark";
+
   const [theme, setTheme] = useState<ThemeMode>(fallbackMode);
   const [themePresetId, setThemePresetIdState] = useState<ThemePresetId>(
     DEFAULT_THEME_SETTINGS.presetId,
@@ -127,20 +149,15 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   const [pageBackgroundImageUri, setPageBackgroundImageUri] = useState<
     string | null
   >(null);
+  const [pageBackgroundOpacity, setPageBackgroundOpacityState] = useState(
+    DEFAULT_PAGE_BACKGROUND_OPACITY,
+  );
 
   const themePreset = getThemePresetDefinition(themePresetId, customPreset);
   const fontPreset = getFontPresetById(fontPresetId);
   const hasCustomTheme = customPreset !== null;
   const activeTone = theme === "dark" ? themePreset.dark : themePreset.light;
 
-  // Dissolves between light/dark mode only (not preset or custom-theme
-  // switches, which stay an instant cut) — an overlay that starts painted
-  // in the old background color and both fades out AND animates its own
-  // color toward the new background, over whatever's already been
-  // re-painted underneath (NativeWind's CSS vars update instantly with no
-  // way to interpolate every dependent color, so without this the mode
-  // toggle would just hard-cut). Animating the overlay's color too — not
-  // just its opacity — is what makes this read as one continuous dissolve.
   const isFirstToneRenderRef = useRef(true);
   const previousModeRef = useRef(theme);
   const previousToneBgRef = useRef(activeTone.bg1);
@@ -149,10 +166,6 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   const [isThemeTransitioning, setIsThemeTransitioning] = useState(false);
   const dissolveProgress = useSharedValue(0);
 
-  // useLayoutEffect (not useEffect) so the overlay is armed in the same
-  // commit as the color-var change, before the new frame paints — with a
-  // plain effect there's a one-frame gap where the screen already shows the
-  // new theme with no overlay yet, then the overlay pops in on top of it.
   useLayoutEffect(() => {
     const modeChanged = previousModeRef.current !== theme;
     previousModeRef.current = theme;
@@ -167,12 +180,17 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
     setDissolveToColor(activeTone.bg1);
     previousToneBgRef.current = activeTone.bg1;
     setIsThemeTransitioning(true);
+
     dissolveProgress.value = 0;
     dissolveProgress.value = withTiming(
       1,
-      { duration: 450, easing: Easing.inOut(Easing.cubic) },
+      {
+        duration: 450,
+        easing: Easing.inOut(Easing.cubic),
+      },
       (finished) => {
         "worklet";
+
         if (finished) {
           runOnJS(setIsThemeTransitioning)(false);
         }
@@ -195,20 +213,33 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
         const storedSettings = await AsyncStorage.getItem(
           THEME_SETTINGS_STORAGE_KEY,
         );
-        const [savedPageBackgroundEnabled, savedPageBackgroundImage] =
-          await Promise.all([
-            AsyncStorage.getItem(PAGE_BACKGROUND_ENABLED_STORAGE_KEY),
-            SecureStorage.load(CUSTOM_THEME_IMAGE_STORAGE_KEY),
-          ]);
+
+        const [
+          savedPageBackgroundEnabled,
+          savedPageBackgroundImage,
+          savedPageBackgroundOpacity,
+        ] = await Promise.all([
+          AsyncStorage.getItem(PAGE_BACKGROUND_ENABLED_STORAGE_KEY),
+          SecureStorage.load(CUSTOM_THEME_IMAGE_STORAGE_KEY),
+          AsyncStorage.getItem(PAGE_BACKGROUND_OPACITY_STORAGE_KEY),
+        ]);
 
         setPageBackgroundEnabledState(savedPageBackgroundEnabled === "true");
         setPageBackgroundImageUri(savedPageBackgroundImage);
+
+        if (savedPageBackgroundOpacity !== null) {
+          setPageBackgroundOpacityState(
+            clampBackgroundOpacity(Number(savedPageBackgroundOpacity)),
+          );
+        }
 
         if (storedSettings) {
           const parsed = JSON.parse(
             storedSettings,
           ) as Partial<StoredThemeSettings>;
+
           const normalized = sanitizeStoredSettings(parsed, fallbackMode);
+
           setTheme(normalized.mode);
           setThemePresetIdState(normalized.presetId);
           setFontPresetIdState(normalized.fontPresetId);
@@ -217,6 +248,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
         }
 
         const legacyTheme = await AsyncStorage.getItem("theme");
+
         if (legacyTheme === "light" || legacyTheme === "dark") {
           setTheme(legacyTheme);
         }
@@ -252,17 +284,16 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
     nextPresetId: ThemePresetId,
     nextFontPresetId: FontPresetId,
     nextCustomPreset: ThemePresetDefinition | null,
-  ): StoredThemeSettings => {
-    return {
-      mode: nextMode,
-      presetId: nextPresetId,
-      fontPresetId: nextFontPresetId,
-      customPreset: nextCustomPreset,
-    };
-  };
+  ): StoredThemeSettings => ({
+    mode: nextMode,
+    presetId: nextPresetId,
+    fontPresetId: nextFontPresetId,
+    customPreset: nextCustomPreset,
+  });
 
   const setThemeMode = async (mode: ThemeMode) => {
     setTheme(mode);
+
     await persistThemeSettings(
       buildStoredSettings(mode, themePresetId, fontPresetId, customPreset),
     );
@@ -279,25 +310,28 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
     }
 
     setThemePresetIdState(presetId);
+
     await persistThemeSettings(
       buildStoredSettings(theme, presetId, fontPresetId, customPreset),
     );
+
     return true;
   };
 
   const setFontPreset = async (nextFontPresetId: FontPresetId) => {
     setFontPresetIdState(nextFontPresetId);
+
     await persistThemeSettings(
       buildStoredSettings(theme, themePresetId, nextFontPresetId, customPreset),
     );
   };
 
-  const buildCustomThemeFromImage = async (imageUri: string) => {
-    const dominantColor = await extractDominantColorFromImage(imageUri);
-    const nextCustomPreset = createCustomThemePreset(dominantColor, "Custom");
-
+  const applyCustomPreset = async (
+    nextCustomPreset: ThemePresetDefinition,
+  ) => {
     setCustomPreset(nextCustomPreset);
     setThemePresetIdState("custom");
+
     await persistThemeSettings(
       buildStoredSettings(theme, "custom", fontPresetId, nextCustomPreset),
     );
@@ -305,11 +339,26 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
     return nextCustomPreset;
   };
 
+  const buildCustomThemeFromImage = async (imageUri: string) => {
+    const dominantColor = await extractDominantColorFromImage(imageUri);
+    const nextCustomPreset = createCustomThemePreset(dominantColor, "Custom");
+
+    return applyCustomPreset(nextCustomPreset);
+  };
+
+  const buildCustomThemeFromColor = async (accentHex: string) => {
+    const nextCustomPreset = createCustomThemePreset(accentHex, "Custom");
+
+    return applyCustomPreset(nextCustomPreset);
+  };
+
   const clearCustomTheme = async () => {
-    const nextPresetId = themePresetId === "custom" ? "default" : themePresetId;
+    const nextPresetId =
+      themePresetId === "custom" ? "default" : themePresetId;
 
     setCustomPreset(null);
     setThemePresetIdState(nextPresetId);
+
     await persistThemeSettings(
       buildStoredSettings(theme, nextPresetId, fontPresetId, null),
     );
@@ -317,9 +366,21 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const setPageBackgroundEnabled = async (enabled: boolean) => {
     setPageBackgroundEnabledState(enabled);
+
     await AsyncStorage.setItem(
       PAGE_BACKGROUND_ENABLED_STORAGE_KEY,
       String(enabled),
+    );
+  };
+
+  const setPageBackgroundOpacity = async (opacity: number) => {
+    const nextOpacity = clampBackgroundOpacity(opacity);
+
+    setPageBackgroundOpacityState(nextOpacity);
+
+    await AsyncStorage.setItem(
+      PAGE_BACKGROUND_OPACITY_STORAGE_KEY,
+      String(nextOpacity),
     );
   };
 
@@ -328,11 +389,16 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
       imageUri === undefined
         ? await SecureStorage.load(CUSTOM_THEME_IMAGE_STORAGE_KEY)
         : imageUri;
+
     setPageBackgroundImageUri(nextImageUri);
 
     if (!nextImageUri) {
       setPageBackgroundEnabledState(false);
-      await AsyncStorage.setItem(PAGE_BACKGROUND_ENABLED_STORAGE_KEY, "false");
+
+      await AsyncStorage.setItem(
+        PAGE_BACKGROUND_ENABLED_STORAGE_KEY,
+        "false",
+      );
     }
   };
 
@@ -351,11 +417,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
         setFontPreset,
         hasCustomTheme,
         buildCustomThemeFromImage,
+        buildCustomThemeFromColor,
         clearCustomTheme,
         activeTone,
         pageBackgroundImageUri,
         pageBackgroundEnabled,
+        pageBackgroundOpacity,
         setPageBackgroundEnabled,
+        setPageBackgroundOpacity,
         refreshPageBackgroundImage,
       }}
     >
@@ -364,6 +433,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
         style={[{ flex: 1 }, vars(createThemeVars(theme, themePreset))]}
       >
         {children}
+
         {isThemeTransitioning && (
           <Animated.View
             pointerEvents="none"
@@ -381,8 +451,10 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
 
 export const useTheme = () => {
   const context = useContext(ThemeContext);
+
   if (!context) {
     throw new Error("useTheme must be used within ThemeProvider");
   }
+
   return context;
 };

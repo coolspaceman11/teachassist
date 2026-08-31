@@ -1,4 +1,4 @@
-﻿import Text from "@/components/ui/AppText";
+import Text from "@/components/ui/AppText";
 import AppTextInput from "@/components/ui/AppTextInput";
 import LiquidGlassButton from "@/components/ui/LiquidGlassButton";
 import LiquidGlassView from "@/components/ui/LiquidGlassView";
@@ -54,11 +54,9 @@ type QuickAction = {
 const QUICK_ACTION_ICONS = {
   teachassist: require("../../assets/images/apple.png"),
   blueprint: require("../../assets/images/blueprint.png"),
-  brightspace: require("../../assets/images/brightspace.png"),
   classroom: require("../../assets/images/g-class.png"),
   volunteer: require("../../assets/images/volunteer.png"),
   examcalc: require("../../assets/images/calculator.png"),
-  schoolcashonline: require("../../assets/images/schoolcashonline.png"),
   idcard: require("../../assets/images/id-card.png"),
   map: require("../../assets/images/map.png"),
   teachers: require("../../assets/images/search_icon.png"),
@@ -147,26 +145,6 @@ const DEFAULT_QUICK_ACTIONS: QuickAction[] = [
     isDefault: true,
     isHidden: true,
   },
-  {
-    id: "brightspace",
-    title: "Brightspace / D2L",
-    url: "https://yrdsb.elearningontario.ca/d2l/login",
-    iconKey: "brightspace",
-    isInternal: false,
-    kind: "external",
-    isDefault: true,
-    isHidden: true,
-  },
-  {
-    id: "schoolcashonline",
-    title: "SchoolCashOnline",
-    url: "https://identity.schoolcashonline.com/Account/Login",
-    iconKey: "schoolcashonline",
-    isInternal: false,
-    kind: "external",
-    isDefault: true,
-    isHidden: true,
-  },
 ];
 
 const DEFAULT_ACTIONS_BY_ID = DEFAULT_QUICK_ACTIONS.reduce(
@@ -179,6 +157,45 @@ const DEFAULT_ACTIONS_BY_ID = DEFAULT_QUICK_ACTIONS.reduce(
 const KNOWN_ACTIONS_BY_ID = {
   ...DEFAULT_ACTIONS_BY_ID,
   [BAYVIEW_MAP_ACTION.id]: BAYVIEW_MAP_ACTION,
+};
+
+const REMOVED_QUICK_ACTION_IDS = new Set([
+  "brightspace",
+  "schoolcashonline",
+]);
+
+const PROFILE_GREETING_NAME_STORAGE_KEY = "profile_greeting_name";
+const PROFILE_GREETING_ENABLED_STORAGE_KEY = "profile_greeting_enabled";
+
+const CHANGELOG = [
+  {
+    version: "0.2.0",
+    date: "August 31, 2026",
+    title: "Study",
+    changes: [
+      "Added the new Study tab with textbook library, flashcards, focus study timer, screen-time planning, school map shell, and quick notepad",
+    ],
+  },
+  {
+    version: "0.1.0",
+    date: "August 30, 2026",
+    title: "TeachAssist+",
+    changes: [
+      "Profile overhaul and streamline, with changes to privacy settings and personalization, offering a much smoother experience",
+      "Bugfixed schedule",
+    ],
+  },
+];
+
+const getDailyGreeting = () => {
+  const greetings = ["Hello", "Greetings", "Hi", "Hey"] as const;
+  const today = new Date();
+  const daySeed =
+    today.getFullYear() * 372 +
+    today.getMonth() * 31 +
+    today.getDate();
+
+  return greetings[daySeed % greetings.length];
 };
 
 const isQuickActionInternal = (
@@ -210,7 +227,11 @@ const reconcileSchoolQuickActions = (
 };
 
 const normalizeQuickActions = (actions: QuickAction[]): QuickAction[] => {
-  const uniqueActions = actions.filter(
+  const supportedActions = actions.filter(
+    (action) => !REMOVED_QUICK_ACTION_IDS.has(action.id),
+  );
+
+  const uniqueActions = supportedActions.filter(
     (action, index, list) =>
       list.findIndex((item) => item.id === action.id) === index,
   );
@@ -266,6 +287,8 @@ const ProfileScreen = () => {
   const { isDark, activeTone, themePresetId } = useTheme();
 
   const [userName, setUserName] = useState<string | null>(null);
+  const [profileGreetingName, setProfileGreetingName] = useState<string | null>(null);
+  const [profileGreetingEnabled, setProfileGreetingEnabled] = useState(true);
   const [school, setSchool] = useState<string | null>(null);
   const [annualGrade, setAnnualGrade] = useState<StudentGrade | null>(null);
   const [annualGradeDismissed, setAnnualGradeDismissed] = useState(false);
@@ -297,6 +320,16 @@ const ProfileScreen = () => {
     setUserName(userName);
     return userName;
   };
+
+  const loadProfileGreetingName = useCallback(async () => {
+    const [savedName, savedEnabled] = await Promise.all([
+      AsyncStorage.getItem(PROFILE_GREETING_NAME_STORAGE_KEY),
+      AsyncStorage.getItem(PROFILE_GREETING_ENABLED_STORAGE_KEY),
+    ]);
+
+    setProfileGreetingName(savedName?.trim() ? savedName.trim() : null);
+    setProfileGreetingEnabled(savedEnabled !== "false");
+  }, []);
 
   const getSchool = async () => {
     const school = await SecureStorage.load("school_name");
@@ -396,7 +429,8 @@ const ProfileScreen = () => {
   useFocusEffect(
     useCallback(() => {
       loadAnnualGradeState();
-    }, [loadAnnualGradeState]),
+      loadProfileGreetingName();
+    }, [loadAnnualGradeState, loadProfileGreetingName]),
   );
 
   useEffect(() => {
@@ -434,6 +468,7 @@ const ProfileScreen = () => {
       getUser();
       getImage();
       getBackgroundImage();
+      loadProfileGreetingName();
       const schoolName = await getSchool();
       await loadQuickActions(schoolName);
     };
@@ -460,8 +495,12 @@ const ProfileScreen = () => {
     setEditingAction(action ?? null);
     setActionTitle(action?.title ?? "");
     setActionUrl(action?.url ?? "");
+
+    // Avoid transitioning two transparent modals on the same frame.
     setShowActionManager(false);
-    setShowActionEditor(true);
+    setTimeout(() => {
+      setShowActionEditor(true);
+    }, 140);
   };
 
   const closeActionEditor = () => {
@@ -469,7 +508,10 @@ const ProfileScreen = () => {
     setActionTitle("");
     setActionUrl("");
     setShowActionEditor(false);
-    setShowActionManager(true);
+
+    setTimeout(() => {
+      setShowActionManager(true);
+    }, 140);
   };
 
   const saveActionEdits = async () => {
@@ -538,32 +580,19 @@ const ProfileScreen = () => {
   const removeQuickAction = async (actionId: string) => {
     const action = quickActions.find((item) => item.id === actionId);
     if (!action || action.isDefault) return;
-    AppAlert.alert(
-      "Delete Action",
-      `Are you sure you want to delete this quick action?`,
-      [
-        {
-          text: "No",
-          style: "cancel",
-        },
-        {
-          text: "Yes, Delete",
-          style: "destructive",
-          onPress: () => {
-            const updated = quickActions.filter((item) => item.id !== actionId);
-            saveQuickActions(updated);
-          },
-        },
-      ],
-      { icon: AlertIcon.delete },
-    );
+
+    // Update immediately so the manager feels responsive, then persist.
+    const updated = quickActions.filter((item) => item.id !== actionId);
+    setQuickActions(updated);
+    await AsyncStorage.setItem("quick_actions", JSON.stringify(updated));
   };
 
-  const setDefaultActionHidden = async (actionId: string, hidden: boolean) => {
+  const setQuickActionHidden = async (actionId: string, hidden: boolean) => {
     const updated = quickActions.map((action) =>
       action.id === actionId ? { ...action, isHidden: hidden } : action,
     );
-    await saveQuickActions(updated);
+    setQuickActions(updated);
+    await AsyncStorage.setItem("quick_actions", JSON.stringify(updated));
   };
 
   const moveQuickAction = async (actionId: string, direction: -1 | 1) => {
@@ -633,6 +662,12 @@ const ProfileScreen = () => {
       .replace("${username}", encodeURIComponent(savedUsername))
       .replace("${password}", encodeURIComponent(savedPassword));
   };
+  const dailyGreeting = getDailyGreeting();
+  const profileDisplayName = profileGreetingName?.trim() || userName || "Student";
+  const profileHeading = profileGreetingEnabled
+    ? `${dailyGreeting}, ${profileDisplayName}`
+    : userName || "Student";
+
   const profileBanner = (
     <ImageBackground
       source={
@@ -679,7 +714,7 @@ const ProfileScreen = () => {
         <Text
           className={`text-3xl font-bold ${isDark ? "text-appwhite" : "text-appblack"}`}
         >
-          {userName ?? "676767676"}
+          {profileHeading}
         </Text>
         <Text
           className={`${isDark ? "text-appwhite" : "text-appblack"} text-lg text-center`}
@@ -817,6 +852,74 @@ const ProfileScreen = () => {
           ))}
         </View>
       </View>
+
+      <View className="mb-6">
+        <Text className="text-2xl font-bold text-baccent mb-4">
+          Changelog
+        </Text>
+
+        {CHANGELOG.map((entry, entryIndex) => (
+          <View
+            key={`${entry.version}-${entry.date}`}
+            style={entryIndex > 0 ? { marginTop: 12 } : undefined}
+          >
+            <LiquidGlassView
+              className="rounded-2xl overflow-hidden"
+              fallbackBackgroundColor={activeTone.bg3}
+              glassTintColor={activeTone.bg2}
+              glassEffectStyle="clear"
+            >
+              <View className="px-5 py-5">
+              <View className="flex-row items-start justify-between">
+                <View className="flex-1 pr-3">
+                  <Text
+                    className={`${isDark ? "text-appwhite" : "text-appblack"} text-lg font-bold`}
+                  >
+                    {entry.title} v{entry.version}
+                  </Text>
+                  <Text
+                    className="text-appwhite/80 text-xs mt-1"
+                  >
+                    {entry.date}
+                  </Text>
+                </View>
+
+                {entryIndex === 0 ? (
+                  <View
+                    className="rounded-full px-3 py-1"
+                    style={{ backgroundColor: activeTone.accent }}
+                  >
+                    <Text
+                      className={`${isDark ? "text-appblack" : "text-appwhite"} text-xs font-bold`}
+                    >
+                      Latest
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
+              <View className="mt-4">
+                {entry.changes.map((change) => (
+                  <View key={change} className="flex-row mb-2">
+                    <Text
+                      className="text-baccent font-bold mr-2"
+                    >
+                      •
+                    </Text>
+                    <Text
+                      className={`${isDark ? "text-appwhite" : "text-appblack"}/80 text-sm leading-5`}
+                      style={{ flex: 1 }}
+                    >
+                      {change}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+              </View>
+            </LiquidGlassView>
+          </View>
+        ))}
+      </View>
     </View>
   );
   const profileHeader = (
@@ -830,31 +933,30 @@ const ProfileScreen = () => {
         My Profile
       </Text>
       <View className="">
-        <LiquidGlassButton
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Open settings"
           onPress={() => {
             router.push("/ProfileSettings");
             hapticsImpact(Haptics.ImpactFeedbackStyle.Rigid);
           }}
-          contentStyle={{
-            borderRadius: 12,
+          style={{
             width: HEADER_ACTION_BUTTON_SIZE,
             height: HEADER_ACTION_BUTTON_SIZE - 5,
             alignItems: "center",
             justifyContent: "center",
           }}
-          glassTintColor={activeTone.accent}
-          fallbackBackgroundColor={activeTone.accent}
         >
           <Image
             source={require("../../assets/images/settings-cog.png")}
             style={{
-              width: HEADER_ACTION_ICON_SIZE,
-              height: HEADER_ACTION_ICON_SIZE,
+              width: HEADER_ACTION_ICON_SIZE + 3,
+              height: HEADER_ACTION_ICON_SIZE + 3,
               resizeMode: "contain",
-              tintColor: isDark ? "#111113" : "#fbfbfb",
+              tintColor: isDark ? "#edebea" : "#2f3035",
             }}
           />
-        </LiquidGlassButton>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -1048,7 +1150,12 @@ const ProfileScreen = () => {
           {settingsContent}
         </ScrollView>
       )}
-      <Modal visible={showActionManager} transparent animationType="fade">
+      <Modal
+        visible={showActionManager}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowActionManager(false)}
+      >
         <View className="flex-1 bg-black/60 items-center justify-center px-5">
             <LiquidGlassView
               containerClassName="w-full max-w-md"
@@ -1085,6 +1192,7 @@ const ProfileScreen = () => {
               <ScrollView
                 className="max-h-85"
                 showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
               >
                 {quickActions.map((action, index) => (
                   <View
@@ -1176,32 +1284,32 @@ const ProfileScreen = () => {
                           />
                         </TouchableOpacity>
                       ) : null}
-                      {action.isDefault ? (
-                        <TouchableOpacity
-                          onPress={() => {
-                            hapticsImpact(Haptics.ImpactFeedbackStyle.Light);
-                            setDefaultActionHidden(action.id, !action.isHidden);
+                      <TouchableOpacity
+                        onPress={() => {
+                          hapticsImpact(Haptics.ImpactFeedbackStyle.Light);
+                          setQuickActionHidden(action.id, !action.isHidden);
+                        }}
+                        className="p-1"
+                      >
+                        <Image
+                          className="w-6 h-6"
+                          style={{
+                            tintColor: isDark ? "#edebea" : "#2f3035",
                           }}
-                          className="p-1"
-                        >
-                          <Image
-                            className={`w-6 h-6`}
-                            style={{
-                              tintColor: isDark ? "#edebea" : "#2f3035",
-                            }}
-                            source={
-                              action.isHidden
-                                ? require("../../assets/images/hiddeneye.png")
-                                : require("../../assets/images/eye.png")
-                            }
-                          />
-                        </TouchableOpacity>
-                      ) : (
+                          source={
+                            action.isHidden
+                              ? require("../../assets/images/hiddeneye.png")
+                              : require("../../assets/images/eye.png")
+                          }
+                        />
+                      </TouchableOpacity>
+
+                      {!action.isDefault ? (
                         <TouchableOpacity
-                          className={`p-1 pl-2`}
-                          onPress={() => {
+                          className="p-1 pl-2"
+                          onPress={async () => {
                             hapticsImpact(Haptics.ImpactFeedbackStyle.Light);
-                            removeQuickAction(action.id);
+                            await removeQuickAction(action.id);
                           }}
                         >
                           <Image
@@ -1212,7 +1320,7 @@ const ProfileScreen = () => {
                             }}
                           />
                         </TouchableOpacity>
-                      )}
+                      ) : null}
                     </View>
                   </View>
                 ))}
@@ -1239,7 +1347,12 @@ const ProfileScreen = () => {
             </LiquidGlassView>
           </View>
         </Modal>
-        <Modal visible={showActionEditor} transparent animationType="fade">
+        <Modal
+          visible={showActionEditor}
+          transparent
+          animationType="fade"
+          onRequestClose={closeActionEditor}
+        >
           <KeyboardAvoidingView className="flex-1" keyboardVerticalOffset={24}>
             <View className="flex-1 bg-black/60 items-center justify-center px-5">
               <LiquidGlassView

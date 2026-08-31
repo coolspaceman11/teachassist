@@ -32,6 +32,9 @@ import { appVersionLabel } from "@/utils/appVersion";
 import { clearCourseReportMemoryCache } from "@/utils/courseReportCache";
 import { clearCoursesMemoryCache } from "@/utils/coursesMemoryCache";
 
+const PROFILE_GREETING_NAME_STORAGE_KEY = "profile_greeting_name";
+const PROFILE_GREETING_ENABLED_STORAGE_KEY = "profile_greeting_enabled";
+
 const primaryActionButtonStyle = {
   borderRadius: 12,
   paddingHorizontal: 16,
@@ -85,6 +88,10 @@ const ProfileSettingsScreen = () => {
     await persistBiometricLockEnabled(false);
     await AsyncStorage.removeItem("haptics_enabled");
     await AsyncStorage.removeItem("quick_actions");
+    await AsyncStorage.removeItem(PROFILE_GREETING_NAME_STORAGE_KEY);
+    await AsyncStorage.removeItem(PROFILE_GREETING_ENABLED_STORAGE_KEY);
+    await AsyncStorage.removeItem("ta_plus_schedule_classes");
+    await AsyncStorage.removeItem("ta_plus_schedule_settings");
     await clearGuidanceReminders();
     await syncBackgroundTasks();
     router.replace("/");
@@ -117,16 +124,46 @@ const ProfileSettingsScreen = () => {
   };
 
   const quoteContent = (
-    <View>
+    <View className="items-center mt-1">
       <Text
-        className={`mt-0 mb-7 text-center text-sm ${isDark ? "text-appgraylight" : "text-appgraylight"}`}
+        className={`text-center text-sm ${isDark ? "text-appgraylight" : "text-appgraylight"}`}
       >
         {`Created @ `}
         <Text className="font-bold not-italic text-danger">BSS</Text>
-        <Text className={`font-bold not-italic text-appwhite ${isDark ? "text-appwhite" : "text-baccent"} `}>LaMango</Text>
+        <Text
+          className={`font-bold not-italic ${
+            isDark ? "text-appwhite" : "text-baccent"
+          }`}
+        >
+          LaMango
+        </Text>
       </Text>
+
+      <View className="flex-row items-center justify-center mt-2 mb-7">
+        <Text
+          className={`text-sm ${
+            isDark ? "text-appgraylight" : "text-appgraydark"
+          }`}
+        >
+          TeachAssist+ Mod by{" "}
+        </Text>
+
+        <TouchableOpacity
+          onPress={() => {
+            hapticsNotification(
+              Haptics.NotificationFeedbackType.Success,
+            );
+            Linking.openURL("https://github.com/coolspaceman11");
+          }}
+        >
+          <Text className="text-baccent font-bold text-sm">
+            Sublimality
+          </Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
+
   const footerContent = (
     <View className={`mb-5 mt-5`}>
       <View className={`flex flex-row items-center justify-center gap-3`}>
@@ -279,34 +316,22 @@ const ProfileSettingsScreen = () => {
           >
             {[
               {
-                title: "Notifications",
-                subtitle: "Get notified on your academics.",
-                icon: require("../../assets/images/bell.png"),
-                action: () => router.push("/Notifications"),
-              },
-              {
                 title: "Personalization",
-                subtitle: "Customize teachassist with themes.",
+                subtitle: "Themes, backgrounds, and appearance.",
                 icon: require("../../assets/images/paintbrush.png"),
                 action: () => router.push("/Personalization"),
               },
               {
-                title: "Privacy",
-                subtitle: "Control grade privacy and visibility.",
+                title: "Privacy & Notifications",
+                subtitle: "Grade privacy, app lock, and notification controls.",
                 icon: require("../../assets/images/lock.png"),
-                action: () => router.push("/Privacy"),
+                action: () => router.push("/(settings)/PrivacyNotifications"),
               },
               {
-                title: "Support",
-                subtitle: "Get help with using teachassist.",
+                title: "Support & Legal",
+                subtitle: "Help, policies, source code, and credits.",
                 icon: require("../../assets/images/support-icon.png"),
-                action: () => router.push("/Support"),
-              },
-              {
-                title: "Legal",
-                subtitle: "Regulatory information and credits.",
-                icon: require("../../assets/images/paper.png"),
-                action: () => router.push("/Legal"),
+                action: () => router.push("/(settings)/SupportLegal"),
               },
               {
                 title: "Advanced",
@@ -345,7 +370,7 @@ const ProfileSettingsScreen = () => {
                     </View>
                   </View>
                 </TouchableOpacity>
-                {index < 5 ? (
+                {index < 3 ? (
                   <View
                     className={`${isDark ? "bg-dark4" : "bg-light4"} h-px mx-4`}
                   />

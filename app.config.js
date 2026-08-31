@@ -6,19 +6,12 @@ module.exports = ({ config }) => {
   return {
     ...config,
 
-    // Different name so stable + dev can coexist.
     name: IS_DEV ? "TeachAssist+ Dev" : config.name,
-
-    // Different Expo slug for development.
     slug: IS_DEV ? "teachassist-plus-dev" : config.slug,
-
-    // Different deep-link scheme so QR codes open the DEV app.
     scheme: IS_DEV ? "teachassistplusdev" : config.scheme,
 
     ios: {
       ...config.ios,
-
-      // Critical: unique bundle ID allows both apps on one iPhone.
       bundleIdentifier: IS_DEV
         ? "com.teachassistplus.studentapp.dev"
         : config.ios?.bundleIdentifier,
@@ -26,7 +19,6 @@ module.exports = ({ config }) => {
 
     android: {
       ...config.android,
-
       package: IS_DEV
         ? "com.teachassistplus.studentapp.dev"
         : config.android?.package,
@@ -38,8 +30,16 @@ module.exports = ({ config }) => {
       [
         "expo-dev-client",
         {
-          // Only make the special Expo dev-client scheme for the dev build.
           addGeneratedScheme: IS_DEV,
+        },
+      ],
+
+      [
+        "react-native-ble-plx",
+        {
+          isBackgroundEnabled: false,
+          bluetoothAlwaysPermission:
+            "Allow TeachAssist+ to connect to your Bluetooth devices, including your Flipper Zero.",
         },
       ],
     ],

@@ -8,7 +8,12 @@ const styles = StyleSheet.create({
 });
 
 const PageBackground = () => {
-  const { isDark, pageBackgroundEnabled, pageBackgroundImageUri } = useTheme();
+  const {
+    isDark,
+    pageBackgroundEnabled,
+    pageBackgroundImageUri,
+    pageBackgroundOpacity,
+  } = useTheme();
 
   if (!pageBackgroundEnabled || !pageBackgroundImageUri) {
     return null;
@@ -23,7 +28,7 @@ const PageBackground = () => {
         style={[
           styles.fill,
           {
-            opacity: isDark ? 0.22 : 0.30,
+            opacity: pageBackgroundOpacity,
           },
         ]}
       />

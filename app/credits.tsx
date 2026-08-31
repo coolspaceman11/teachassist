@@ -1,9 +1,9 @@
-﻿import { Link } from "expo-router";
-import { Image, ScrollView, View } from "react-native";
-import Text from "@/components/ui/AppText";
+﻿import Text from "@/components/ui/AppText";
 import BackButton from "@/components/ui/Back";
 import PageBackground from "@/components/ui/PageBackground";
 import { useTheme } from "@/contexts/ThemeContext";
+import { Link } from "expo-router";
+import { Image, ScrollView, View } from "react-native";
 
 const Guidance = () => {
   const { isDark } = useTheme();
@@ -32,7 +32,7 @@ const Guidance = () => {
             href="https://www.flaticon.com/free-icons/course"
             className={`${isDark ? "text-appwhite" : "text-appblack"} my-2 mr-2`}
           >
-            <Text>Tanah Basah</Text>
+            <Text>THIS IS A SAMPLE TEXT TEST FOR VS CODE</Text>
           </Link>
           <Link
             href="https://www.flaticon.com/free-icons/user"
