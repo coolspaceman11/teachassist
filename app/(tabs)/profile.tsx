@@ -3,9 +3,11 @@ import AppTextInput from "@/components/ui/AppTextInput";
 import LiquidGlassButton from "@/components/ui/LiquidGlassButton";
 import LiquidGlassView from "@/components/ui/LiquidGlassView";
 import PageBackground from "@/components/ui/PageBackground";
+import ProfileWeatherBar from "@/components/ProfileWeatherBar";
 import { SnowEffect } from "@/components/ui/SnowEffect";
 import { useTheme } from "@/contexts/ThemeContext";
 import { hapticsImpact} from "@/utils/haptics";
+import { useFunSettings } from "@/utils/funSettings";
 import { useNativeTabsEnabled } from "@/utils/nativeTabs";
 import { getTeachAssistServerOrigin } from "@/utils/serverConfig";
 import {
@@ -169,6 +171,14 @@ const PROFILE_GREETING_ENABLED_STORAGE_KEY = "profile_greeting_enabled";
 
 const CHANGELOG = [
   {
+    version: "0.3.0",
+    date: "August 31, 2026",
+    title: "The Fun Update",
+    changes: [
+      "Added Midnight Mode, live Maple weather, a schedule calendar, Maxwell pet, Coin Flip, rainy study ambience, and Cozy Wave with Wave and Ship modes",
+    ],
+  },
+  {
     version: "0.2.0",
     date: "August 31, 2026",
     title: "Study",
@@ -285,6 +295,7 @@ const ProfileScreen = () => {
     : 16;
 
   const { isDark, activeTone, themePresetId } = useTheme();
+  const { midnightActive } = useFunSettings();
 
   const [userName, setUserName] = useState<string | null>(null);
   const [profileGreetingName, setProfileGreetingName] = useState<string | null>(null);
@@ -681,6 +692,13 @@ const ProfileScreen = () => {
       style={isLandscape ? { flex: 1 } : { paddingVertical: 45 }}
       imageStyle={isLandscape ? { borderRadius: 12 } : undefined}
     >
+      {midnightActive ? (
+        <View className="absolute top-4 left-5 right-20 z-10">
+          <Text className="text-white/90 text-sm font-semibold">
+            you should probably sleep
+          </Text>
+        </View>
+      ) : null}
       <View className="absolute top-3 right-3">
         <LiquidGlassButton
           contentStyle={{
@@ -1132,7 +1150,7 @@ const ProfileScreen = () => {
         <View className="flex-1" style={{ paddingBottom: nativeTabBottomPadding }}>
           {profileHeader}
           <View className="flex-1 flex-row gap-4 mx-5 mb-5">
-            <View style={{ flex: 1 }} className="self-stretch">{profileBanner}</View>
+            <View style={{ flex: 1 }} className="self-stretch">{profileBanner}<ProfileWeatherBar /></View>
             <View style={{ flex: 2 }}>
             <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
               {settingsContent}
@@ -1147,6 +1165,7 @@ const ProfileScreen = () => {
         >
           {profileHeader}
           {profileBanner}
+          <ProfileWeatherBar />
           {settingsContent}
         </ScrollView>
       )}

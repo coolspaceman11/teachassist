@@ -18,6 +18,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { SecureStorage } from "@/app/(auth)/taauth";
+import { useFunSettings } from "@/utils/funSettings";
 import {
   createCustomThemePreset,
   createThemeVars,
@@ -40,6 +41,17 @@ import {
 
 const PAGE_BACKGROUND_OPACITY_STORAGE_KEY = "page_background_opacity";
 const DEFAULT_PAGE_BACKGROUND_OPACITY = 0.3;
+
+const MIDNIGHT_TONE: ThemeTone = {
+  bg1: "#02050b",
+  bg2: "#050b15",
+  bg3: "#081321",
+  bg4: "#0e1d31",
+  fg: "#f4f7ff",
+  muted: "#8797ad",
+  accent: "#6dbdff",
+  border: "#18314d",
+};
 
 interface ThemeContextType {
   theme: ThemeMode;
@@ -133,6 +145,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const systemTheme = useColorScheme();
+  const { midnightActive } = useFunSettings();
   const fallbackMode: ThemeMode = systemTheme === "light" ? "light" : "dark";
 
   const [theme, setTheme] = useState<ThemeMode>(fallbackMode);
@@ -156,7 +169,22 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   const themePreset = getThemePresetDefinition(themePresetId, customPreset);
   const fontPreset = getFontPresetById(fontPresetId);
   const hasCustomTheme = customPreset !== null;
-  const activeTone = theme === "dark" ? themePreset.dark : themePreset.light;
+
+  const effectiveTheme: ThemeMode = midnightActive ? "dark" : theme;
+  const effectiveThemePreset: ThemePresetDefinition = midnightActive
+    ? {
+        ...themePreset,
+        dark: {
+          ...MIDNIGHT_TONE,
+          accent: themePreset.dark.accent || MIDNIGHT_TONE.accent,
+        },
+      }
+    : themePreset;
+
+  const activeTone =
+    effectiveTheme === "dark"
+      ? effectiveThemePreset.dark
+      : effectiveThemePreset.light;
 
   const isFirstToneRenderRef = useRef(true);
   const previousModeRef = useRef(theme);
@@ -262,10 +290,10 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     StatusBar.setBarStyle(
-      theme === "dark" ? "light-content" : "dark-content",
+      effectiveTheme === "dark" ? "light-content" : "dark-content",
       true,
     );
-  }, [theme]);
+  }, [effectiveTheme]);
 
   const persistThemeSettings = async (settings: StoredThemeSettings) => {
     try {
@@ -405,9 +433,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   return (
     <ThemeContext.Provider
       value={{
-        theme,
+        theme: effectiveTheme,
         toggleTheme,
-        isDark: theme === "dark",
+        isDark: effectiveTheme === "dark",
         setThemeMode,
         themePresetId,
         themePreset,
@@ -430,7 +458,10 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
     >
       <View
         key={fontPresetId}
-        style={[{ flex: 1 }, vars(createThemeVars(theme, themePreset))]}
+        style={[
+          { flex: 1 },
+          vars(createThemeVars(effectiveTheme, effectiveThemePreset)),
+        ]}
       >
         {children}
 

@@ -7,9 +7,12 @@ import {
   Alert,
   Animated,
   Easing,
+  Keyboard,
+  KeyboardAvoidingView,
   Linking,
   Modal,
   PanResponder,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -34,6 +37,7 @@ type StudyTool =
   | "focus"
   | "blocker"
   | "notepad"
+  | "calculator"
   | null;
 
 type TextbookItem = {
@@ -167,6 +171,12 @@ const STUDY_TOOLS = [
     title: "Quick Notepad",
     subtitle: "Type or draw notes into folders",
     icon: "edit-note" as const,
+  },
+  {
+    id: "calculator" as const,
+    title: "Scientific Calculator",
+    subtitle: "Trig, logs, powers, roots, and more",
+    icon: "calculate" as const,
   },
 ];
 
@@ -339,44 +349,6 @@ export default function StudyScreen() {
           ))}
         </View>
 
-        <LiquidGlassView
-          className="rounded-2xl overflow-hidden mt-2"
-          fallbackBackgroundColor={activeTone.bg3}
-          glassTintColor={activeTone.bg2}
-          glassEffectStyle="clear"
-        >
-          <View style={styles.tipCard}>
-            <MaterialIcons
-              name="auto-awesome"
-              size={22}
-              color={activeTone.accent}
-            />
-
-            <View style={{ flex: 1 }}>
-              <Text
-                style={[
-                  styles.tipTitle,
-                  {
-                    color: textColor,
-                  },
-                ]}
-              >
-                Built for quick access
-              </Text>
-
-              <Text
-                style={[
-                  styles.tipText,
-                  {
-                    color: activeTone.muted,
-                  },
-                ]}
-              >
-                Every study tool opens as a full-screen panel from the right.
-              </Text>
-            </View>
-          </View>
-        </LiquidGlassView>
       </ScrollView>
 
       {panelMounted && activeTool && (
@@ -405,6 +377,7 @@ export default function StudyScreen() {
           {activeTool === "focus" && <FocusStudy />}
           {activeTool === "blocker" && <ScreenTimePlanner />}
           {activeTool === "notepad" && <QuickNotepad />}
+          {activeTool === "calculator" && <ScientificCalculator />}
         </Animated.View>
       )}
     </View>
@@ -916,6 +889,8 @@ function Flashcards() {
   const [showCardBuilder, setShowCardBuilder] = useState(false);
   const [cardFront, setCardFront] = useState("");
   const [cardBack, setCardBack] = useState("");
+  const frontInputRef = useRef<TextInput>(null);
+  const backInputRef = useRef<TextInput>(null);
   const [reviewDeckId, setReviewDeckId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -1202,7 +1177,11 @@ function Flashcards() {
         animationType="fade"
         onRequestClose={() => setShowCardBuilder(false)}
       >
-        <View style={styles.modalBackdrop}>
+        <KeyboardAvoidingView
+          style={styles.modalBackdrop}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={16}
+        >
           <LiquidGlassView
             containerClassName="w-full max-w-md"
             className="rounded-2xl overflow-hidden"
@@ -1308,7 +1287,7 @@ function Flashcards() {
               </Pressable>
             </View>
           </LiquidGlassView>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -1630,6 +1609,125 @@ function FlashcardReview({
   );
 }
 
+
+function RainyStudyOverlay() {
+  const { width, height } = useWindowDimensions();
+  const cloudA = useRef(new Animated.Value(0)).current;
+  const cloudB = useRef(new Animated.Value(0)).current;
+  const rain = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const a = Animated.loop(
+      Animated.timing(cloudA, {
+        toValue: 1,
+        duration: 14500,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    const b = Animated.loop(
+      Animated.timing(cloudB, {
+        toValue: 1,
+        duration: 19000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    const r = Animated.loop(
+      Animated.timing(rain, {
+        toValue: 1,
+        duration: 850,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+
+    a.start();
+    b.start();
+    r.start();
+
+    return () => {
+      a.stop();
+      b.stop();
+      r.stop();
+    };
+  }, [cloudA, cloudB, rain]);
+
+  const rainY = rain.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-50, Math.max(700, height)],
+  });
+
+  return (
+    <View pointerEvents="none" style={styles.rainyFocusOverlay}>
+      <View style={styles.rainyFocusTint} />
+
+      <Animated.View
+        style={[
+          styles.rainCloudGroup,
+          {
+            top: 70,
+            transform: [
+              {
+                translateX: cloudA.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-190, width + 210],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <View style={styles.rainCloudLong} />
+        <View style={styles.rainCloudRound} />
+      </Animated.View>
+
+      <Animated.View
+        style={[
+          styles.rainCloudGroup,
+          {
+            top: 175,
+            opacity: 0.55,
+            transform: [
+              {
+                translateX: cloudB.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [width + 150, -220],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <View style={styles.rainCloudLong} />
+        <View style={styles.rainCloudRound} />
+      </Animated.View>
+
+      {Array.from({ length: 24 }).map((_, index) => (
+        <Animated.View
+          key={index}
+          style={[
+            styles.rainDrop,
+            {
+              left: `${(index * 43) % 100}%`,
+              opacity: 0.22 + (index % 4) * 0.07,
+              transform: [
+                {
+                  translateY: Animated.add(
+                    rainY,
+                    new Animated.Value(-(index % 8) * 78),
+                  ),
+                },
+                { rotate: "10deg" },
+              ],
+            },
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
 function FocusStudy() {
   const { activeTone, isDark } = useTheme();
   const textColor = isDark ? "#edebea" : "#2f3035";
@@ -1642,6 +1740,74 @@ function FocusStudy() {
   const [running, setRunning] = useState(false);
   const [targetEnd, setTargetEnd] = useState<number | null>(null);
   const [completedFocusSessions, setCompletedFocusSessions] = useState(0);
+  const [rainVisualEnabled, setRainVisualEnabled] = useState(false);
+  const [rainSoundEnabled, setRainSoundEnabled] = useState(false);
+  const rainPlayerRef = useRef<any>(null);
+
+  useEffect(() => {
+    Promise.all([
+      AsyncStorage.getItem("study_rain_visual_enabled"),
+      AsyncStorage.getItem("study_rain_sound_enabled"),
+    ])
+      .then(([visual, sound]) => {
+        setRainVisualEnabled(visual === "true");
+        setRainSoundEnabled(sound === "true");
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const syncRain = async () => {
+      if (!running || !rainSoundEnabled) {
+        try {
+          rainPlayerRef.current?.pause?.();
+        } catch {}
+        return;
+      }
+
+      try {
+        if (!rainPlayerRef.current) {
+          const Audio = await import("expo-audio");
+          if (cancelled) return;
+
+          const player = Audio.createAudioPlayer(
+            require("../../assets/audio/calming-rain-loop.wav"),
+          );
+          player.loop = true;
+          player.volume = 0.5;
+          rainPlayerRef.current = player;
+        }
+
+        rainPlayerRef.current.loop = true;
+        rainPlayerRef.current.play();
+      } catch (error) {
+        console.warn("[Study] Rain audio unavailable", error);
+        setRainSoundEnabled(false);
+        await AsyncStorage.setItem("study_rain_sound_enabled", "false");
+        Alert.alert(
+          "Rain Sound Needs the New IPA",
+          "Rain visuals still work, but Expo Audio needs to be included in a rebuilt app before the rain sound can play.",
+        );
+      }
+    };
+
+    syncRain();
+    return () => {
+      cancelled = true;
+    };
+  }, [running, rainSoundEnabled]);
+
+  useEffect(() => {
+    return () => {
+      try {
+        rainPlayerRef.current?.pause?.();
+        rainPlayerRef.current?.release?.();
+      } catch {}
+      rainPlayerRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (!running || !targetEnd) {
@@ -1711,6 +1877,7 @@ function FocusStudy() {
 
   return (
     <View style={styles.panelBody}>
+      {running && rainVisualEnabled ? <RainyStudyOverlay /> : null}
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.panelScrollContent}
@@ -1778,6 +1945,105 @@ function FocusStudy() {
             );
           })}
         </View>
+
+        <LiquidGlassView
+          className="rounded-2xl overflow-hidden mt-5"
+          fallbackBackgroundColor={activeTone.bg3}
+          glassTintColor={activeTone.bg2}
+          glassEffectStyle="clear"
+        >
+          <View style={styles.rainSettingsCard}>
+            <View style={styles.rainSettingsHeader}>
+              <MaterialIcons name="water-drop" size={21} color={activeTone.accent} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.rainSettingsTitle, { color: textColor }]}>
+                  Rainy Focus
+                </Text>
+                <Text style={[styles.rainSettingsSubtitle, { color: activeTone.muted }]}>
+                  Optional clouds, rain, and looping rain ambience while the timer runs.
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.rainSettingsButtons}>
+              <Pressable
+                onPress={async () => {
+                  const next = !rainVisualEnabled;
+                  setRainVisualEnabled(next);
+                  await AsyncStorage.setItem("study_rain_visual_enabled", String(next));
+                }}
+                style={[
+                  styles.rainSettingButton,
+                  {
+                    backgroundColor: rainVisualEnabled
+                      ? activeTone.accent
+                      : activeTone.bg4,
+                  },
+                ]}
+              >
+                <MaterialIcons
+                  name="cloud"
+                  size={18}
+                  color={
+                    rainVisualEnabled
+                      ? isDark ? "#111113" : "#ffffff"
+                      : textColor
+                  }
+                />
+                <Text
+                  style={{
+                    color:
+                      rainVisualEnabled
+                        ? isDark ? "#111113" : "#ffffff"
+                        : textColor,
+                    fontSize: 12,
+                    fontWeight: "800",
+                  }}
+                >
+                  Visuals
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={async () => {
+                  const next = !rainSoundEnabled;
+                  setRainSoundEnabled(next);
+                  await AsyncStorage.setItem("study_rain_sound_enabled", String(next));
+                }}
+                style={[
+                  styles.rainSettingButton,
+                  {
+                    backgroundColor: rainSoundEnabled
+                      ? activeTone.accent
+                      : activeTone.bg4,
+                  },
+                ]}
+              >
+                <MaterialIcons
+                  name="volume-up"
+                  size={18}
+                  color={
+                    rainSoundEnabled
+                      ? isDark ? "#111113" : "#ffffff"
+                      : textColor
+                  }
+                />
+                <Text
+                  style={{
+                    color:
+                      rainSoundEnabled
+                        ? isDark ? "#111113" : "#ffffff"
+                        : textColor,
+                    fontSize: 12,
+                    fontWeight: "800",
+                  }}
+                >
+                  Rain Sound
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </LiquidGlassView>
 
         <LiquidGlassView
           className="rounded-3xl overflow-hidden mt-7"
@@ -2700,6 +2966,7 @@ function NoteEditor({
   onSave: (note: StudyNote) => Promise<void>;
 }) {
   const { activeTone, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const textColor = isDark ? "#edebea" : "#2f3035";
 
   const [draft, setDraft] = useState<StudyNote | null>(note);
@@ -2790,7 +3057,15 @@ function NoteEditor({
           },
         ]}
       >
-        <View style={styles.noteEditorHeader}>
+        <View
+          style={[
+            styles.noteEditorHeader,
+            {
+              paddingTop: insets.top + 12,
+              minHeight: insets.top + 66,
+            },
+          ]}
+        >
           <Pressable onPress={onClose} style={styles.textButton}>
             <Text style={{ color: activeTone.accent, fontWeight: "700" }}>
               Cancel
@@ -2978,6 +3253,531 @@ function NoteEditor({
   );
 }
 
+
+type CalculatorAngleMode = "DEG" | "RAD";
+
+type CalculatorToken =
+  | { type: "number"; value: string }
+  | { type: "operator"; value: string }
+  | { type: "function"; value: string }
+  | { type: "leftParen"; value: "(" }
+  | { type: "rightParen"; value: ")" };
+
+const CALC_FUNCTIONS = new Set(["sin", "cos", "tan", "sqrt", "ln", "log", "abs"]);
+
+const tokenizeCalculator = (expression: string): CalculatorToken[] => {
+  const normalized = expression.replace(/π/g, "pi").replace(/×/g, "*").replace(/÷/g, "/");
+  const tokens: CalculatorToken[] = [];
+  let index = 0;
+
+  while (index < normalized.length) {
+    const char = normalized[index];
+
+    if (/\s/.test(char)) {
+      index += 1;
+      continue;
+    }
+
+    if (/\d|\./.test(char)) {
+      let value = char;
+      index += 1;
+
+      while (index < normalized.length && /[\d.]/.test(normalized[index])) {
+        value += normalized[index];
+        index += 1;
+      }
+
+      if (!/^\d*\.?\d+$/.test(value) || value === ".") {
+        throw new Error("Invalid number");
+      }
+
+      tokens.push({ type: "number", value });
+      continue;
+    }
+
+    if (/[A-Za-z]/.test(char)) {
+      let value = char;
+      index += 1;
+
+      while (index < normalized.length && /[A-Za-z]/.test(normalized[index])) {
+        value += normalized[index];
+        index += 1;
+      }
+
+      if (value === "pi") {
+        tokens.push({ type: "number", value: String(Math.PI) });
+      } else if (value === "e") {
+        tokens.push({ type: "number", value: String(Math.E) });
+      } else if (value === "ans") {
+        throw new Error("ANS should be expanded before parsing");
+      } else if (CALC_FUNCTIONS.has(value)) {
+        tokens.push({ type: "function", value });
+      } else {
+        throw new Error(`Unknown function ${value}`);
+      }
+
+      continue;
+    }
+
+    if (char === "(") {
+      tokens.push({ type: "leftParen", value: "(" });
+      index += 1;
+      continue;
+    }
+
+    if (char === ")") {
+      tokens.push({ type: "rightParen", value: ")" });
+      index += 1;
+      continue;
+    }
+
+    if ("+-*/^".includes(char)) {
+      const previous = tokens[tokens.length - 1];
+      const unary =
+        char === "-" &&
+        (!previous ||
+          previous.type === "operator" ||
+          previous.type === "leftParen" ||
+          previous.type === "function");
+
+      tokens.push({
+        type: "operator",
+        value: unary ? "u-" : char,
+      });
+
+      index += 1;
+      continue;
+    }
+
+    throw new Error(`Unsupported character ${char}`);
+  }
+
+  return tokens;
+};
+
+const calculatorToRpn = (tokens: CalculatorToken[]) => {
+  const output: CalculatorToken[] = [];
+  const stack: CalculatorToken[] = [];
+
+  const precedence: Record<string, number> = {
+    "+": 1,
+    "-": 1,
+    "*": 2,
+    "/": 2,
+    "^": 4,
+    "u-": 5,
+  };
+
+  const rightAssociative = new Set(["^", "u-"]);
+
+  tokens.forEach((token) => {
+    if (token.type === "number") {
+      output.push(token);
+      return;
+    }
+
+    if (token.type === "function") {
+      stack.push(token);
+      return;
+    }
+
+    if (token.type === "operator") {
+      while (stack.length > 0) {
+        const top = stack[stack.length - 1];
+
+        if (top.type === "function") {
+          output.push(stack.pop()!);
+          continue;
+        }
+
+        if (top.type !== "operator") {
+          break;
+        }
+
+        const currentPrecedence = precedence[token.value] ?? 0;
+        const topPrecedence = precedence[top.value] ?? 0;
+        const shouldPop = rightAssociative.has(token.value)
+          ? currentPrecedence < topPrecedence
+          : currentPrecedence <= topPrecedence;
+
+        if (!shouldPop) {
+          break;
+        }
+
+        output.push(stack.pop()!);
+      }
+
+      stack.push(token);
+      return;
+    }
+
+    if (token.type === "leftParen") {
+      stack.push(token);
+      return;
+    }
+
+    while (
+      stack.length > 0 &&
+      stack[stack.length - 1].type !== "leftParen"
+    ) {
+      output.push(stack.pop()!);
+    }
+
+    if (stack.length === 0) {
+      throw new Error("Mismatched parentheses");
+    }
+
+    stack.pop();
+
+    if (stack[stack.length - 1]?.type === "function") {
+      output.push(stack.pop()!);
+    }
+  });
+
+  while (stack.length > 0) {
+    const token = stack.pop()!;
+
+    if (token.type === "leftParen" || token.type === "rightParen") {
+      throw new Error("Mismatched parentheses");
+    }
+
+    output.push(token);
+  }
+
+  return output;
+};
+
+const evaluateCalculator = (
+  expression: string,
+  angleMode: CalculatorAngleMode,
+) => {
+  const rpn = calculatorToRpn(tokenizeCalculator(expression));
+  const stack: number[] = [];
+  const angleIn = (value: number) =>
+    angleMode === "DEG" ? (value * Math.PI) / 180 : value;
+
+  rpn.forEach((token) => {
+    if (token.type === "number") {
+      stack.push(Number(token.value));
+      return;
+    }
+
+    if (token.type === "operator") {
+      if (token.value === "u-") {
+        const value = stack.pop();
+        if (value === undefined) throw new Error("Missing value");
+        stack.push(-value);
+        return;
+      }
+
+      const right = stack.pop();
+      const left = stack.pop();
+
+      if (left === undefined || right === undefined) {
+        throw new Error("Incomplete expression");
+      }
+
+      switch (token.value) {
+        case "+":
+          stack.push(left + right);
+          break;
+        case "-":
+          stack.push(left - right);
+          break;
+        case "*":
+          stack.push(left * right);
+          break;
+        case "/":
+          if (right === 0) throw new Error("Cannot divide by zero");
+          stack.push(left / right);
+          break;
+        case "^":
+          stack.push(Math.pow(left, right));
+          break;
+        default:
+          throw new Error("Unknown operator");
+      }
+
+      return;
+    }
+
+    if (token.type === "function") {
+      const value = stack.pop();
+      if (value === undefined) throw new Error("Missing function value");
+
+      switch (token.value) {
+        case "sin":
+          stack.push(Math.sin(angleIn(value)));
+          break;
+        case "cos":
+          stack.push(Math.cos(angleIn(value)));
+          break;
+        case "tan":
+          stack.push(Math.tan(angleIn(value)));
+          break;
+        case "sqrt":
+          if (value < 0) throw new Error("Invalid square root");
+          stack.push(Math.sqrt(value));
+          break;
+        case "ln":
+          if (value <= 0) throw new Error("Invalid logarithm");
+          stack.push(Math.log(value));
+          break;
+        case "log":
+          if (value <= 0) throw new Error("Invalid logarithm");
+          stack.push(Math.log10(value));
+          break;
+        case "abs":
+          stack.push(Math.abs(value));
+          break;
+        default:
+          throw new Error("Unknown function");
+      }
+    }
+  });
+
+  if (stack.length !== 1 || !Number.isFinite(stack[0])) {
+    throw new Error("Invalid expression");
+  }
+
+  return stack[0];
+};
+
+function ScientificCalculator() {
+  const { activeTone, isDark } = useTheme();
+  const textColor = isDark ? "#edebea" : "#2f3035";
+
+  const [expression, setExpression] = useState("");
+  const [result, setResult] = useState("0");
+  const [answer, setAnswer] = useState(0);
+  const [angleMode, setAngleMode] = useState<CalculatorAngleMode>("DEG");
+
+  const append = (value: string) => {
+    setExpression((current) => `${current}${value}`);
+  };
+
+  const evaluate = () => {
+    if (!expression.trim()) {
+      return;
+    }
+
+    try {
+      const expanded = expression.replace(/\bANS\b/g, `(${answer})`);
+      const value = evaluateCalculator(expanded, angleMode);
+      const formatted =
+        Math.abs(value) >= 1e10 || (Math.abs(value) > 0 && Math.abs(value) < 1e-8)
+          ? value.toExponential(8).replace(/0+e/, "e")
+          : Number(value.toFixed(10)).toString();
+
+      setAnswer(value);
+      setResult(formatted);
+      hapticsImpact(Haptics.ImpactFeedbackStyle.Light);
+    } catch {
+      setResult("Error");
+      hapticsImpact(Haptics.ImpactFeedbackStyle.Heavy);
+    }
+  };
+
+  const handleButton = (label: string) => {
+    switch (label) {
+      case "C":
+        setExpression("");
+        setResult("0");
+        return;
+      case "⌫":
+        setExpression((current) => current.slice(0, -1));
+        return;
+      case "=":
+        evaluate();
+        return;
+      case "sin":
+      case "cos":
+      case "tan":
+      case "ln":
+      case "log":
+        append(`${label}(`);
+        return;
+      case "√":
+        append("sqrt(");
+        return;
+      case "π":
+        append("π");
+        return;
+      case "×":
+        append("*");
+        return;
+      case "÷":
+        append("/");
+        return;
+      case "−":
+        append("-");
+        return;
+      case "x²":
+        append("^2");
+        return;
+      case "xʸ":
+        append("^");
+        return;
+      case "%":
+        append("*0.01");
+        return;
+      case "±":
+        setExpression((current) => (current ? `-(${current})` : "-"));
+        return;
+      case "ANS":
+        append("ANS");
+        return;
+      default:
+        append(label);
+    }
+  };
+
+  const rows = [
+    ["sin", "cos", "tan", "√", "⌫"],
+    ["ln", "log", "π", "e", "C"],
+    ["7", "8", "9", "÷", "("],
+    ["4", "5", "6", "×", ")"],
+    ["1", "2", "3", "−", "xʸ"],
+    ["0", ".", "%", "+", "x²"],
+    ["±", "ANS", "=", "", ""],
+  ];
+
+  return (
+    <View style={styles.panelBody}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.calculatorContent}
+      >
+        <LiquidGlassView
+          className="rounded-3xl overflow-hidden"
+          fallbackBackgroundColor={activeTone.bg3}
+          glassTintColor={activeTone.bg2}
+          glassEffectStyle="clear"
+        >
+          <View style={styles.calculatorDisplay}>
+            <View style={styles.calculatorTopRow}>
+              <View style={styles.angleSwitch}>
+                {(["DEG", "RAD"] as CalculatorAngleMode[]).map((mode) => {
+                  const selected = angleMode === mode;
+
+                  return (
+                    <Pressable
+                      key={mode}
+                      onPress={() => setAngleMode(mode)}
+                      style={[
+                        styles.angleButton,
+                        {
+                          backgroundColor: selected
+                            ? activeTone.accent
+                            : activeTone.bg4,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          color: selected
+                            ? isDark
+                              ? "#111113"
+                              : "#ffffff"
+                            : textColor,
+                          fontSize: 11,
+                          fontWeight: "900",
+                        }}
+                      >
+                        {mode}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <Text style={{ color: activeTone.muted, fontSize: 11 }}>
+                Scientific
+              </Text>
+            </View>
+
+            <Text
+              numberOfLines={2}
+              adjustsFontSizeToFit
+              style={[styles.calculatorExpression, { color: activeTone.muted }]}
+            >
+              {expression || "0"}
+            </Text>
+
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              style={[styles.calculatorResult, { color: textColor }]}
+            >
+              {result}
+            </Text>
+          </View>
+        </LiquidGlassView>
+
+        <View style={styles.calculatorKeys}>
+          {rows.flatMap((row, rowIndex) =>
+            row.map((label, columnIndex) => {
+              if (!label) {
+                return (
+                  <View
+                    key={`blank-${rowIndex}-${columnIndex}`}
+                    style={styles.calculatorKey}
+                  />
+                );
+              }
+
+              const accent = label === "=";
+              const utility =
+                ["sin", "cos", "tan", "√", "ln", "log", "π", "e", "⌫", "C", "x²", "xʸ", "%", "±", "ANS"].includes(
+                  label,
+                );
+
+              return (
+                <Pressable
+                  key={`${rowIndex}-${label}`}
+                  onPress={() => handleButton(label)}
+                  style={[
+                    styles.calculatorKey,
+                    {
+                      backgroundColor: accent
+                        ? activeTone.accent
+                        : utility
+                          ? activeTone.bg4
+                          : activeTone.bg3,
+                      borderColor: activeTone.border,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      color: accent
+                        ? isDark
+                          ? "#111113"
+                          : "#ffffff"
+                        : utility
+                          ? activeTone.accent
+                          : textColor,
+                      fontSize: label.length > 3 ? 12 : 17,
+                      fontWeight: "800",
+                    }}
+                  >
+                    {label}
+                  </Text>
+                </Pressable>
+              );
+            }),
+          )}
+        </View>
+
+        <Text style={[styles.calculatorHint, { color: activeTone.muted }]}>
+          Supports parentheses, powers, square roots, logarithms, trigonometry,
+          percentages, π, e, and your previous answer.
+        </Text>
+      </ScrollView>
+    </View>
+  );
+}
+
 function EmptyState({
   icon,
   title,
@@ -3089,24 +3889,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     marginTop: 5,
-  },
-
-  tipCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 13,
-    padding: 16,
-  },
-
-  tipTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-  },
-
-  tipText: {
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 3,
   },
 
   panelHeader: {
@@ -3328,6 +4110,81 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
+  calculatorContent: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 60,
+  },
+
+  calculatorDisplay: {
+    minHeight: 178,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    justifyContent: "flex-end",
+  },
+
+  calculatorTopRow: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    top: 15,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  angleSwitch: {
+    flexDirection: "row",
+    gap: 6,
+  },
+
+  angleButton: {
+    minWidth: 48,
+    height: 30,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  calculatorExpression: {
+    fontSize: 20,
+    textAlign: "right",
+    marginBottom: 7,
+  },
+
+  calculatorResult: {
+    fontSize: 42,
+    lineHeight: 50,
+    textAlign: "right",
+    fontWeight: "600",
+    fontVariant: ["tabular-nums"],
+  },
+
+  calculatorKeys: {
+    marginTop: 16,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    rowGap: 8,
+  },
+
+  calculatorKey: {
+    width: "18.4%",
+    aspectRatio: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  calculatorHint: {
+    fontSize: 11,
+    lineHeight: 17,
+    textAlign: "center",
+    marginTop: 15,
+    paddingHorizontal: 12,
+  },
+
   viewerScreen: {
     flex: 1,
     paddingTop: 0,
@@ -3480,6 +4337,90 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
 
+  rainSettingsCard: {
+    padding: 15,
+  },
+
+  rainSettingsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  rainSettingsTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+  },
+
+  rainSettingsSubtitle: {
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 3,
+  },
+
+  rainSettingsButtons: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 13,
+  },
+
+  rainSettingButton: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+
+  rainyFocusOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 2,
+    overflow: "hidden",
+  },
+
+  rainyFocusTint: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(8, 18, 31, 0.14)",
+  },
+
+  rainCloudGroup: {
+    position: "absolute",
+    left: 0,
+    width: 140,
+    height: 70,
+  },
+
+  rainCloudLong: {
+    position: "absolute",
+    left: 0,
+    top: 18,
+    width: 120,
+    height: 36,
+    borderRadius: 999,
+    backgroundColor: "rgba(240,245,250,0.25)",
+  },
+
+  rainCloudRound: {
+    position: "absolute",
+    left: 30,
+    top: 0,
+    width: 68,
+    height: 55,
+    borderRadius: 999,
+    backgroundColor: "rgba(240,245,250,0.25)",
+  },
+
+  rainDrop: {
+    position: "absolute",
+    top: 0,
+    width: 2,
+    height: 22,
+    borderRadius: 2,
+    backgroundColor: "rgba(220,235,255,0.62)",
+  },
+
   timerCard: {
     alignItems: "center",
     paddingHorizontal: 20,
@@ -3590,6 +4531,7 @@ const styles = StyleSheet.create({
   noteEditorHeader: {
     minHeight: 58,
     paddingHorizontal: 18,
+    paddingBottom: 9,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",

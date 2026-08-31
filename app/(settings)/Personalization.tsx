@@ -12,6 +12,7 @@ import {
   setHapticsEnabled as saveHapticsEnabled,
 } from "@/utils/haptics";
 import { useLiquidGlassEnabled } from "@/utils/liquidGlass";
+import { setMidnightModeForced, setPetEnabled, useFunSettings } from "@/utils/funSettings";
 import {
   BUILT_IN_THEME_PRESETS,
   CUSTOM_THEME_IMAGE_STORAGE_KEY,
@@ -90,6 +91,7 @@ const PersonalizationScreen = () => {
   } = useTheme();
 
   const router = useRouter();
+  const { midnightModeForced, automaticMidnight, petEnabled } = useFunSettings();
 
   const [isBuildingCustomTheme, setIsBuildingCustomTheme] = useState(false);
   const [customAccent, setCustomAccent] = useState(activeTone.accent);
@@ -1111,6 +1113,33 @@ const PersonalizationScreen = () => {
               className={`${isDark ? "bg-dark4" : "bg-light4"} h-px mx-4`}
             />
 
+            <View className="px-4 py-4 flex-row justify-between items-center">
+              <View className="flex-1 pr-3">
+                <Text
+                  className={`${isDark ? "text-appwhite" : "text-appblack"} text-base font-semibold`}
+                >
+                  Midnight Mode
+                </Text>
+                <Text
+                  className={`${isDark ? "text-appwhite" : "text-appblack"}/60 text-sm mt-1`}
+                >
+                  Starry late-night visuals. It also turns on automatically from 12:00–3:00 AM{automaticMidnight ? " and is active right now" : ""}.
+                </Text>
+              </View>
+
+              <AppToggle
+                value={midnightModeForced}
+                onValueChange={async (value) => {
+                  await setMidnightModeForced(value);
+                  hapticsImpact(Haptics.ImpactFeedbackStyle.Light);
+                }}
+              />
+            </View>
+
+            <View
+              className={`${isDark ? "bg-dark4" : "bg-light4"} h-px mx-4`}
+            />
+
             <View className="px-4 py-4">
               <Text
                 className={`${
@@ -1208,6 +1237,34 @@ const PersonalizationScreen = () => {
                   </Text>
                 </TouchableOpacity>
               </View>
+            </View>
+          </LiquidGlassView>
+        </View>
+
+        <View className="mt-6">
+          <Text className="text-2xl font-bold text-baccent mb-4">Pet</Text>
+          <LiquidGlassView
+            className="rounded-2xl overflow-hidden"
+            fallbackBackgroundColor={activeTone.bg3}
+            glassTintColor={activeTone.bg2}
+            glassEffectStyle="clear"
+          >
+            <View className="px-4 py-4 flex-row justify-between items-center">
+              <View className="flex-1 pr-3">
+                <Text className={`${isDark ? "text-appwhite" : "text-appblack"} text-base font-semibold`}>
+                  Maxwell
+                </Text>
+                <Text className={`${isDark ? "text-appwhite" : "text-appblack"}/60 text-sm mt-1`}>
+                  Put Maxwell at the bottom of the app. Drag him around and gravity brings him back down.
+                </Text>
+              </View>
+              <AppToggle
+                value={petEnabled}
+                onValueChange={async (value) => {
+                  await setPetEnabled(value);
+                  hapticsImpact(Haptics.ImpactFeedbackStyle.Light);
+                }}
+              />
             </View>
           </LiquidGlassView>
         </View>

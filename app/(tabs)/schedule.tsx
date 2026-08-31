@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import ScheduleTasksModal from "@/components/ScheduleTasksModal";
+import ScheduleCalendarModal from "@/components/ScheduleCalendarModal";
 import Text from "@/components/ui/AppText";
 import AppToggle from "@/components/ui/AppToggle";
 import LiquidGlassView from "@/components/ui/LiquidGlassView";
@@ -200,6 +201,8 @@ export default function ScheduleScreen() {
     useState<ScheduleClass | null>(
       null,
     );
+
+  const [calendarVisible, setCalendarVisible] = useState(false);
 
   const [
     saving,
@@ -1345,7 +1348,35 @@ export default function ScheduleScreen() {
             )}
           </>
         )}
+
+        <Pressable
+          onPress={() => {
+            hapticsImpact(Haptics.ImpactFeedbackStyle.Medium);
+            setCalendarVisible(true);
+          }}
+          style={[
+            styles.calendarButton,
+            {
+              backgroundColor: activeTone.bg3,
+              borderColor: activeTone.accent,
+            },
+          ]}
+        >
+          <View style={[styles.calendarIconWrap, { backgroundColor: activeTone.bg4 }]}>
+            <MaterialIcons name="calendar-month" size={27} color={activeTone.accent} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.calendarButtonTitle, { color: textColor }]}>Calendar</Text>
+            <Text style={[styles.calendarButtonSubtitle, { color: muted }]}>Events, PA days, school events, and reminders</Text>
+          </View>
+          <MaterialIcons name="chevron-right" size={25} color={activeTone.accent} />
+        </Pressable>
       </ScrollView>
+
+      <ScheduleCalendarModal
+        visible={calendarVisible}
+        onClose={() => setCalendarVisible(false)}
+      />
 
       <ScheduleTasksModal
         visible={
@@ -2647,4 +2678,33 @@ const styles =
       justifyContent: "center",
       marginTop: 10,
     },
-  });
+  
+
+    calendarButton: {
+      minHeight: 86,
+      borderRadius: 19,
+      borderWidth: 1,
+      marginTop: 18,
+      marginBottom: 8,
+      paddingHorizontal: 14,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    calendarIconWrap: {
+      width: 50,
+      height: 50,
+      borderRadius: 15,
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 12,
+    },
+    calendarButtonTitle: {
+      fontSize: 20,
+      fontWeight: "900",
+    },
+    calendarButtonSubtitle: {
+      fontSize: 11,
+      lineHeight: 16,
+      marginTop: 3,
+    },
+});

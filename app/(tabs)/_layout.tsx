@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { hapticsImpact } from "@/utils/haptics";
+import FunOverlays from "@/components/FunOverlays";
 
 const TabIcon = ({
   focused,
@@ -51,7 +52,8 @@ export default function TabLayout() {
   const tabBarBaseHeight = 56;
 
   return (
-    <Tabs
+    <View style={{ flex: 1 }}>
+      <Tabs
       screenListeners={{
         tabPress: () => {
           hapticsImpact(Haptics.ImpactFeedbackStyle.Rigid);
@@ -167,6 +169,8 @@ export default function TabLayout() {
           ),
         }}
       />
-    </Tabs>
+      </Tabs>
+      <FunOverlays />
+    </View>
   );
 }
