@@ -72,17 +72,15 @@ function AppShell() {
 }
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     "Domine-Regular": require("../assets/fonts/Domine/static/Domine-Regular.ttf"),
     "Domine-Medium": require("../assets/fonts/Domine/static/Domine-Medium.ttf"),
     "Domine-SemiBold": require("../assets/fonts/Domine/static/Domine-SemiBold.ttf"),
     "Domine-Bold": require("../assets/fonts/Domine/static/Domine-Bold.ttf"),
-
     "GoogleSans-Regular": require("../assets/fonts/elgooG/Product-Sans-Regular.ttf"),
     "GoogleSans-Medium": require("../assets/fonts/elgooG/Product-Sans-Regular.ttf"),
     "GoogleSans-SemiBold": require("../assets/fonts/elgooG/Product-Sans-Bold.ttf"),
     "GoogleSans-Bold": require("../assets/fonts/elgooG/Product-Sans-Bold.ttf"),
-
     "JetBrainsMono-Regular": require("../assets/fonts/JetBrains_Mono/static/JetBrainsMono-Regular.ttf"),
     "JetBrainsMono-Medium": require("../assets/fonts/JetBrains_Mono/static/JetBrainsMono-Medium.ttf"),
     "JetBrainsMono-SemiBold": require("../assets/fonts/JetBrains_Mono/static/JetBrainsMono-SemiBold.ttf"),
@@ -116,7 +114,18 @@ export default function RootLayout() {
       });
   }, []);
 
-  if (!fontsLoaded) {
+  useEffect(() => {
+    if (fontError) {
+      console.warn(
+        "[startup] Custom fonts failed to load. Continuing with system font fallback.",
+        fontError,
+      );
+    }
+  }, [fontError]);
+
+  // Do not allow one failed font asset to strand the app on the native splash
+  // screen forever. A font error now falls back to system rendering.
+  if (!fontsLoaded && !fontError) {
     return null;
   }
 
