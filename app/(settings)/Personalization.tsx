@@ -1158,13 +1158,6 @@ const PersonalizationScreen = () => {
                   >
                     Enable Profile Greeting
                   </Text>
-                  <Text
-                    className={`${
-                      isDark ? "text-appwhite" : "text-appblack"
-                    }/60 text-xs mt-1`}
-                  >
-                    Turn this off to show only your student number on My Profile.
-                  </Text>
                 </View>
 
                 <AppToggle
@@ -1172,15 +1165,6 @@ const PersonalizationScreen = () => {
                   onValueChange={toggleProfileGreeting}
                 />
               </View>
-
-              <Text
-                className={`${
-                  isDark ? "text-appwhite" : "text-appblack"
-                }/60 text-sm mt-4`}
-              >
-                When enabled, My Profile rotates daily between Hello, Greetings, Hi, and Hey.
-                Leave the name blank to greet your student number, or enter a custom name.
-              </Text>
 
               <TextInput
                 value={profileGreetingName}

@@ -27,7 +27,16 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { appVersionLabel } from "@/utils/appVersion";
 import { clearCourseReportMemoryCache } from "@/utils/courseReportCache";
 import { clearCoursesMemoryCache } from "@/utils/coursesMemoryCache";
-import { toggleGPTAccess } from "@/utils/funSettings";
+import {
+  setMaxwellPlaneUnlocked,
+  toggleGPTAccess,
+  toggleKingshot,
+  toggleWaveMockup,
+} from "@/utils/funSettings";
+import {
+  unlockAllShipTestAircraft,
+  wipeOwnedShipAircraft,
+} from "@/utils/shipEconomy";
 import { hapticsImpact, hapticsNotification } from "@/utils/haptics";
 import { getLiquidGlassEnabled, setLiquidGlassEnabled } from "@/utils/liquidGlass";
 import { loadNotificationSettings, saveNotificationSetting, syncBackgroundTasks } from "@/utils/notifications";
@@ -124,7 +133,67 @@ export default function PersonalizationAdvancedScreen() {
       await hapticsImpact(Haptics.ImpactFeedbackStyle.Medium);
       AppAlert.alert(
         enabled ? "GPT Access Enabled" : "GPT Access Disabled",
-        enabled ? "GPT Access is now available in Misc." : "GPT Access was removed from Misc.",
+        enabled ? "Groq-powered GPT Access is now available in Misc." : "GPT Access was removed from Misc.",
+      );
+      return;
+    }
+
+    if (submittedCode.toUpperCase() === "WAVE") {
+      const enabled = await toggleWaveMockup();
+      setExperimentCode("");
+      await hapticsImpact(Haptics.ImpactFeedbackStyle.Medium);
+      AppAlert.alert(
+        enabled ? "Wave Enabled" : "Wave Disabled",
+        enabled
+          ? "GD Wave Mockup is now available in Misc."
+          : "GD Wave Mockup was removed from Misc.",
+      );
+      return;
+    }
+
+    if (submittedCode.toUpperCase() === "KINGSHOT") {
+      const enabled = await toggleKingshot();
+      setExperimentCode("");
+      await hapticsImpact(Haptics.ImpactFeedbackStyle.Medium);
+      AppAlert.alert(
+        enabled ? "Kingshot Demo Enabled" : "Kingshot Demo Disabled",
+        enabled
+          ? "Kingshot Demo is now available in Misc."
+          : "Kingshot Demo was removed from Misc.",
+      );
+      return;
+    }
+
+    if (submittedCode.toUpperCase() === "MAXWELL") {
+      await setMaxwellPlaneUnlocked(true);
+      setExperimentCode("");
+      await hapticsImpact(Haptics.ImpactFeedbackStyle.Medium);
+      AppAlert.alert(
+        "Unlocked",
+        "A new aircraft is waiting in the GD Wave Mockup store.",
+      );
+      return;
+    }
+
+    if (submittedCode.toUpperCase() === "DEVTEST") {
+      await unlockAllShipTestAircraft();
+      setExperimentCode("");
+      await hapticsImpact(Haptics.ImpactFeedbackStyle.Medium);
+      AppAlert.alert(
+        "Test Aircraft Unlocked",
+        "All regular aircraft are now owned for testing.",
+      );
+      return;
+    }
+
+    if (submittedCode.toUpperCase() === "DEVWIPE") {
+      await wipeOwnedShipAircraft();
+      await setMaxwellPlaneUnlocked(false);
+      setExperimentCode("");
+      await hapticsImpact(Haptics.ImpactFeedbackStyle.Medium);
+      AppAlert.alert(
+        "Aircraft Reset",
+        "Owned aircraft were reset to Default.",
       );
       return;
     }

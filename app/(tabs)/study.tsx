@@ -151,7 +151,7 @@ const STUDY_TOOLS = [
   {
     id: "flashcards" as const,
     title: "Flashcards",
-    subtitle: "Decks, card flips, and spaced repetition",
+    subtitle: "Decks and spaced repetition features",
     icon: "style" as const,
   },
   {
@@ -892,6 +892,7 @@ function Flashcards() {
   const frontInputRef = useRef<TextInput>(null);
   const backInputRef = useRef<TextInput>(null);
   const [reviewDeckId, setReviewDeckId] = useState<string | null>(null);
+  const [expandedDeckId, setExpandedDeckId] = useState<string | null>(null);
 
   useEffect(() => {
     AsyncStorage.getItem(FLASHCARDS_KEY)
@@ -938,6 +939,36 @@ function Flashcards() {
           text: "Delete",
           style: "destructive",
           onPress: () => persist(decks.filter((deck) => deck.id !== deckId)),
+        },
+      ],
+    );
+  };
+
+  const removeCard = (
+    deckId: string,
+    cardId: string,
+  ) => {
+    Alert.alert(
+      "Delete flashcard?",
+      "This removes only this card from the deck.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () =>
+            persist(
+              decks.map((deck) =>
+                deck.id === deckId
+                  ? {
+                      ...deck,
+                      cards: deck.cards.filter(
+                        (card) => card.id !== cardId,
+                      ),
+                    }
+                  : deck,
+              ),
+            ),
         },
       ],
     );
@@ -1164,6 +1195,110 @@ function Flashcards() {
                       </Text>
                     </Pressable>
                   </View>
+
+                  {deck.cards.length > 0 ? (
+                    <>
+                      <Pressable
+                        onPress={() =>
+                          setExpandedDeckId((current) =>
+                            current === deck.id ? null : deck.id,
+                          )
+                        }
+                        style={[
+                          styles.manageCardsButton,
+                          {
+                            backgroundColor: activeTone.bg2,
+                            borderColor: activeTone.border,
+                          },
+                        ]}
+                      >
+                        <MaterialIcons
+                          name={
+                            expandedDeckId === deck.id
+                              ? "expand-less"
+                              : "view-list"
+                          }
+                          size={18}
+                          color={activeTone.accent}
+                        />
+                        <Text
+                          style={[
+                            styles.manageCardsButtonText,
+                            { color: textColor },
+                          ]}
+                        >
+                          {expandedDeckId === deck.id
+                            ? "Hide Cards"
+                            : "Manage Cards"}
+                        </Text>
+                      </Pressable>
+
+                      {expandedDeckId === deck.id ? (
+                        <View
+                          style={[
+                            styles.flashcardManager,
+                            {
+                              backgroundColor: activeTone.bg2,
+                              borderColor: activeTone.border,
+                            },
+                          ]}
+                        >
+                          {deck.cards.map((card, cardIndex) => (
+                            <View
+                              key={card.id}
+                              style={[
+                                styles.flashcardManagerRow,
+                                cardIndex > 0
+                                  ? {
+                                      borderTopWidth: 1,
+                                      borderTopColor: activeTone.border,
+                                    }
+                                  : null,
+                              ]}
+                            >
+                              <View style={{ flex: 1, paddingRight: 10 }}>
+                                <Text
+                                  numberOfLines={2}
+                                  style={[
+                                    styles.flashcardManagerFront,
+                                    { color: textColor },
+                                  ]}
+                                >
+                                  {card.front}
+                                </Text>
+                                <Text
+                                  numberOfLines={2}
+                                  style={[
+                                    styles.flashcardManagerBack,
+                                    { color: activeTone.muted },
+                                  ]}
+                                >
+                                  {card.back}
+                                </Text>
+                              </View>
+
+                              <Pressable
+                                hitSlop={10}
+                                onPress={() =>
+                                  removeCard(deck.id, card.id)
+                                }
+                                style={[
+                                  styles.flashcardDeleteButton,
+                                  { backgroundColor: activeTone.bg4 },
+                                ]}
+                              >
+                                <MaterialIcons
+                                  name="delete-outline"
+                                  size={19}
+                                  color="#d85d64"
+                                />
+                              </Pressable>
+                            </View>
+                          ))}
+                        </View>
+                      ) : null}
+                    </>
+                  ) : null}
                 </View>
               </LiquidGlassView>
             );
@@ -1957,10 +2092,7 @@ function FocusStudy() {
               <MaterialIcons name="water-drop" size={21} color={activeTone.accent} />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.rainSettingsTitle, { color: textColor }]}>
-                  Rainy Focus
-                </Text>
-                <Text style={[styles.rainSettingsSubtitle, { color: activeTone.muted }]}>
-                  Optional clouds, rain, and looping rain ambience while the timer runs.
+                  Rain Effect
                 </Text>
               </View>
             </View>
@@ -2237,47 +2369,6 @@ function ScreenTimePlanner() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.panelScrollContent}
       >
-        <LiquidGlassView
-          className="rounded-2xl overflow-hidden"
-          fallbackBackgroundColor={activeTone.bg3}
-          glassTintColor={activeTone.bg2}
-          glassEffectStyle="clear"
-        >
-          <View style={styles.warningCard}>
-            <MaterialIcons
-              name="info-outline"
-              size={22}
-              color={activeTone.accent}
-            />
-
-            <View style={{ flex: 1 }}>
-              <Text
-                style={[
-                  styles.warningTitle,
-                  {
-                    color: textColor,
-                  },
-                ]}
-              >
-                Native iPhone blocking needs one more native layer
-              </Text>
-
-              <Text
-                style={[
-                  styles.warningText,
-                  {
-                    color: activeTone.muted,
-                  },
-                ]}
-              >
-                This screen saves the exact rules and unlock flow now. System-wide
-                YouTube, Discord, app, and website enforcement will connect to
-                Apple's Screen Time / Family Controls extension in a native build.
-              </Text>
-            </View>
-          </View>
-        </LiquidGlassView>
-
         <Text
           style={[
             styles.sectionTitle,
@@ -4221,6 +4312,56 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
+  manageCardsButton: {
+    minHeight: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+
+  manageCardsButtonText: {
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  flashcardManager: {
+    borderRadius: 13,
+    borderWidth: 1,
+    marginTop: 8,
+    overflow: "hidden",
+  },
+
+  flashcardManagerRow: {
+    minHeight: 66,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+
+  flashcardManagerFront: {
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  flashcardManagerBack: {
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 3,
+  },
+
+  flashcardDeleteButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.58)",
@@ -4352,11 +4493,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
-  rainSettingsSubtitle: {
-    fontSize: 11,
-    lineHeight: 16,
-    marginTop: 3,
-  },
 
   rainSettingsButtons: {
     flexDirection: "row",
@@ -4478,22 +4614,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
 
-  warningCard: {
-    flexDirection: "row",
-    gap: 12,
-    padding: 16,
-  },
 
-  warningTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-  },
 
-  warningText: {
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 4,
-  },
 
   segmentRow: {
     flexDirection: "row",
@@ -4509,6 +4631,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 7,
+  },
+
+  warningText: {
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 5,
   },
 
   unlockCard: {

@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
+import { awardShipTaskCompletionBonus } from "@/utils/shipEconomy";
 import { Platform } from "react-native";
 import {
   createContext,
@@ -829,6 +830,18 @@ export function ScheduleProvider({
   const completeTask = async (
     taskId: string,
   ) => {
+    // Hidden GD Ship economy bonus. This intentionally has no Schedule UI,
+    // toast, or task-completion message. The bonus is only surfaced later
+    // inside the unlocked Ship menu.
+    try {
+      await awardShipTaskCompletionBonus();
+    } catch (error) {
+      console.warn(
+        "[Schedule] Could not apply hidden ship task bonus.",
+        error,
+      );
+    }
+
     await removeTask(taskId);
   };
 

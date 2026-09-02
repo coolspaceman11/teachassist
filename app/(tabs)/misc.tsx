@@ -6,6 +6,10 @@ import {
   Alert,
   Animated,
   Easing,
+  Image,
+  Linking,
+  Modal,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,17 +18,26 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Polygon } from "react-native-svg";
+import Svg, { Circle, Path, Polygon, Rect } from "react-native-svg";
 
 import Text from "@/components/ui/AppText";
 import LiquidGlassView from "@/components/ui/LiquidGlassView";
 import PageBackground from "@/components/ui/PageBackground";
+import GDShipGame from "@/components/GDShipGame";
+import KingshotDemo from "@/components/KingshotDemo";
 import { useTheme } from "@/contexts/ThemeContext";
 import { hapticsImpact } from "@/utils/haptics";
 import { setGPTAccessEnabled, useFunSettings } from "@/utils/funSettings";
+import {
+  consumePendingShipTaskBonus,
+  SHIP_CREDITS_KEY,
+  SHIP_EQUIPPED_KEY,
+  SHIP_HIGH_SCORE_KEY,
+  SHIP_OWNED_KEY,
+} from "@/utils/shipEconomy";
 import { SecureStorage } from "../(auth)/taauth";
 
-type MiscTool = "sunshine" | "flipper" | "coin" | "wave" | "gpt" | null;
+type MiscTool = "sunshine" | "flipper" | "coin" | "wave" | "kingshot" | "gpt" | null;
 
 type SunshineRow = {
   id: string;
@@ -153,7 +166,12 @@ const normalizeSunshineRow = (
 
 export default function MiscScreen() {
   const { activeTone, isDark } = useTheme();
-  const { gptAccessEnabled } = useFunSettings();
+  const {
+    gptAccessEnabled,
+    maxwellPlaneUnlocked,
+    waveMockupEnabled,
+    kingshotEnabled,
+  } = useFunSettings();
   const { width } = useWindowDimensions();
 
   const [activeTool, setActiveTool] = useState<MiscTool>(null);
@@ -285,24 +303,59 @@ export default function MiscScreen() {
           </LiquidGlassView>
         </Pressable>
 
-        <Pressable style={styles.cell} onPress={() => openTool("wave")}>
-          <LiquidGlassView
-            className="rounded-2xl overflow-hidden"
-            fallbackBackgroundColor={activeTone.bg3}
-            glassTintColor={activeTone.bg2}
-            glassEffectStyle="clear"
-          >
-            <View style={styles.card}>
-              <View style={[styles.iconWrap, { backgroundColor: activeTone.bg4 }]}>
-                <MaterialIcons name="change-history" size={28} color={activeTone.accent} />
+        {waveMockupEnabled ? (
+          <Pressable style={styles.cell} onPress={() => openTool("wave")}>
+            <LiquidGlassView
+              className="rounded-2xl overflow-hidden"
+              fallbackBackgroundColor={activeTone.bg3}
+              glassTintColor={activeTone.bg2}
+              glassEffectStyle="clear"
+            >
+              <View style={styles.card}>
+                <View style={[styles.iconWrap, { backgroundColor: activeTone.bg4 }]}>
+                  <MaterialIcons
+                    name="change-history"
+                    size={28}
+                    color={activeTone.accent}
+                  />
+                </View>
+                <Text style={[styles.cardTitle, { color: textColor }]}>
+                  GD Wave Mockup
+                </Text>
+                <Text style={[styles.cardSubtitle, { color: activeTone.muted }]}>
+                  A gamemode inspired by GD's wave and more
+                </Text>
               </View>
-              <Text style={[styles.cardTitle, { color: textColor }]}>Cozy Wave</Text>
-              <Text style={[styles.cardSubtitle, { color: activeTone.muted }]}>
-                Hold to rise, release to fall
-              </Text>
-            </View>
-          </LiquidGlassView>
-        </Pressable>
+            </LiquidGlassView>
+          </Pressable>
+        ) : null}
+
+        {kingshotEnabled ? (
+          <Pressable style={styles.cell} onPress={() => openTool("kingshot")}>
+            <LiquidGlassView
+              className="rounded-2xl overflow-hidden"
+              fallbackBackgroundColor={activeTone.bg3}
+              glassTintColor={activeTone.bg2}
+              glassEffectStyle="clear"
+            >
+              <View style={styles.card}>
+                <View style={[styles.iconWrap, { backgroundColor: activeTone.bg4 }]}>
+                  <MaterialIcons
+                    name="castle"
+                    size={28}
+                    color={activeTone.accent}
+                  />
+                </View>
+                <Text style={[styles.cardTitle, { color: textColor }]}>
+                  Kingshot Demo
+                </Text>
+                <Text style={[styles.cardSubtitle, { color: activeTone.muted }]}>
+                  Kingshot demo style mockup
+                </Text>
+              </View>
+            </LiquidGlassView>
+          </Pressable>
+        ) : null}
 
         {gptAccessEnabled ? (
           <View style={styles.cell}>
@@ -337,7 +390,7 @@ export default function MiscScreen() {
                       { color: activeTone.muted },
                     ]}
                   >
-                    Ask GPT from a TeachAssist+ interface
+                    Fast AI powered by Groq
                   </Text>
                 </Pressable>
 
@@ -439,8 +492,10 @@ export default function MiscScreen() {
                   : activeTool === "coin"
                     ? "Coin Flip"
                     : activeTool === "wave"
-                      ? "Cozy Wave"
-                      : "GPT Access"
+                      ? "GD Wave Mockup"
+                      : activeTool === "kingshot"
+                        ? "Kingshot Demo"
+                        : "GPT Access"
             }
             onClose={closeTool}
           />
@@ -448,7 +503,8 @@ export default function MiscScreen() {
           {activeTool === "sunshine" && <SunshineListPanel />}
           {activeTool === "flipper" && <FlipperPanel />}
           {activeTool === "coin" && <CoinFlipPanel />}
-          {activeTool === "wave" && <CozyWavePanel />}
+          {activeTool === "wave" && <GDWaveMockupPanel maxwellUnlocked={maxwellPlaneUnlocked} />}
+          {activeTool === "kingshot" && <KingshotDemo />}
           {activeTool === "gpt" && <GPTAccessPanel />}
         </Animated.View>
       )}
@@ -1215,7 +1271,8 @@ function CoinFlipPanel() {
 }
 
 
-type CozyObstacle = {
+
+type WaveObstacle = {
   id: number;
   x: number;
   width: number;
@@ -1223,993 +1280,1230 @@ type CozyObstacle = {
   side: "top" | "bottom";
 };
 
-type CozySpike = {
+type WaveSpike = {
   id: number;
   x: number;
   y: number;
-  vy: number;
   rotation: number;
 };
 
-type CozyMode = "wave" | "ship";
+type GameMode = "wave" | "ship";
+type ShipMenuScreen = "menu" | "store" | "game";
+type ShipSkinId =
+  | "default"
+  | "turboprop"
+  | "jet"
+  | "airliner"
+  | "bomber"
+  | "interceptor"
+  | "maxwell";
 
-const COZY_WAVE_HIGH_SCORE = "ta_plus_cozy_wave_high_score";
-const COZY_SHIP_HIGH_SCORE = "ta_plus_cozy_ship_high_score";
+type ShipAbility =
+  | "none"
+  | "rearGun"
+  | "flares"
+  | "hunter"
+  | "gunFlares";
 
-function CozyWavePanel() {
+type ShipSkinDefinition = {
+  id: ShipSkinId;
+  name: string;
+  price: number;
+  speed: number;
+  acceleration: number;
+  ability: ShipAbility;
+  description: string;
+};
+
+type ShipMissile = {
+  id: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  age: number;
+  rotation: number;
+  elite: boolean;
+};
+
+type ShipProjectile = {
+  id: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  age: number;
+  kind: "bullet" | "hunter";
+  targetId?: number;
+};
+
+type ShipFlare = {
+  id: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  expiresAt: number;
+};
+
+type ShipExplosion = {
+  id: number;
+  x: number;
+  y: number;
+  bornAt: number;
+};
+
+type ShipTrailPoint = {
+  x: number;
+  y: number;
+};
+
+type ShipScene = {
+  plane: { x: number; y: number };
+  heading: number;
+  camera: { x: number; y: number };
+  missiles: ShipMissile[];
+  projectiles: ShipProjectile[];
+  flares: ShipFlare[];
+  explosions: ShipExplosion[];
+  trail: ShipTrailPoint[];
+  elapsed: number;
+  earnedPreview: number;
+  flareCooldown: number;
+  gunCooldown: number;
+};
+
+const GD_WAVE_HIGH_SCORE_KEY = "ta_plus_gd_wave_high_score";
+
+const SHIP_SKINS: ShipSkinDefinition[] = [
+  {
+    id: "default",
+    name: "Default",
+    price: 0,
+    speed: 142,
+    acceleration: 6.2,
+    ability: "none",
+    description: "Balanced starter aircraft.",
+  },
+  {
+    id: "turboprop",
+    name: "Turboprop",
+    price: 100,
+    speed: 178,
+    acceleration: 6.5,
+    ability: "none",
+    description: "Fast propeller aircraft with stronger cruising speed.",
+  },
+  {
+    id: "jet",
+    name: "Jet",
+    price: 1000,
+    speed: 222,
+    acceleration: 7.2,
+    ability: "rearGun",
+    description: "High speed with a rear-firing defensive cannon.",
+  },
+  {
+    id: "bomber",
+    name: "Bomber",
+    price: 2000,
+    speed: 174,
+    acceleration: 5.9,
+    ability: "hunter",
+    description: "Launches counter-missiles that hunt incoming missiles.",
+  },
+  {
+    id: "airliner",
+    name: "Airliner",
+    price: 3500,
+    speed: 166,
+    acceleration: 5.8,
+    ability: "flares",
+    description: "Large aircraft with missile-decoy flares.",
+  },
+  {
+    id: "interceptor",
+    name: "Interceptor",
+    price: 5000,
+    speed: 246,
+    acceleration: 7.8,
+    ability: "gunFlares",
+    description: "Fast defensive aircraft with rear guns and flares.",
+  },
+  {
+    id: "maxwell",
+    name: "Maxwell",
+    price: 0,
+    speed: 198,
+    acceleration: 6.9,
+    ability: "none",
+    description: "A hidden upgraded turboprop.",
+  },
+];
+
+const distance = (
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+) => Math.hypot(ax - bx, ay - by);
+
+const normalizeVector = (
+  x: number,
+  y: number,
+) => {
+  const length = Math.hypot(x, y);
+
+  if (length < 0.0001) {
+    return { x: 1, y: 0 };
+  }
+
+  return {
+    x: x / length,
+    y: y / length,
+  };
+};
+
+const SHIP_SPRITES: Record<
+  Exclude<ShipSkinId, "maxwell">,
+  any
+> = {
+  default: require("../../assets/planes/default.png"),
+  turboprop: require("../../assets/planes/turboprop.png"),
+  jet: require("../../assets/planes/jet.png"),
+  bomber: require("../../assets/planes/bomber.png"),
+  airliner: require("../../assets/planes/airliner.png"),
+  interceptor: require("../../assets/planes/interceptor.png"),
+};
+
+function SpinningPropeller({
+  accent,
+  size,
+}: {
+  accent: string;
+  size: number;
+}) {
+  const spin = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.timing(spin, {
+        toValue: 1,
+        duration: 420,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+
+    animation.start();
+
+    return () => {
+      animation.stop();
+    };
+  }, [spin]);
+
+  const rotate = spin.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        left: size * 0.5 - 1.5,
+        top: size * 0.015,
+        width: 3,
+        height: size * 0.23,
+        borderRadius: 2,
+        backgroundColor: accent,
+        opacity: 0.9,
+        transform: [{ rotate }],
+      }}
+    />
+  );
+}
+
+function PlaneGraphic({
+  skin,
+  accent,
+  size = 58,
+}: {
+  skin: ShipSkinId;
+  accent: string;
+  size?: number;
+  spinPhase?: number;
+}) {
+  if (skin === "maxwell") {
+    return (
+      <View
+        style={{
+          width: size,
+          height: size,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <View
+          style={{
+            position: "absolute",
+            left: size * 0.04,
+            top: size * 0.31,
+            width: size * 0.87,
+            height: size * 0.32,
+            borderRadius: size,
+            backgroundColor: `${accent}24`,
+            borderWidth: 1,
+            borderColor: accent,
+          }}
+        />
+
+        <Image
+          source={require("../../assets/images/maxwell.png")}
+          resizeMode="contain"
+          style={{
+            width: size * 0.72,
+            height: size * 0.72,
+            tintColor: accent,
+          }}
+        />
+
+        <SpinningPropeller
+          accent={accent}
+          size={size}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <Image
+        source={SHIP_SPRITES[skin]}
+        resizeMode="contain"
+        fadeDuration={0}
+        style={{
+          width: size,
+          height: size,
+          tintColor: accent,
+        }}
+      />
+
+      {skin === "turboprop" ? (
+        <SpinningPropeller
+          accent={accent}
+          size={size}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function GDWaveMockupPanel({
+  maxwellUnlocked,
+}: {
+  maxwellUnlocked: boolean;
+}) {
+  const { activeTone, isDark } = useTheme();
+  const [mode, setMode] = useState<GameMode>("wave");
+
+  return (
+    <View style={styles.panelBody}>
+      <View style={styles.waveModeRow}>
+        {[
+          {
+            key: "wave" as const,
+            label: "Wave",
+            icon: "change-history" as const,
+          },
+          {
+            key: "ship" as const,
+            label: "Ship",
+            icon: "flight" as const,
+          },
+        ].map((option) => {
+          const selected = mode === option.key;
+
+          return (
+            <Pressable
+              key={option.key}
+              onPress={() => {
+                setMode(option.key);
+                hapticsImpact(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              style={[
+                styles.waveModeButton,
+                {
+                  backgroundColor: selected
+                    ? activeTone.accent
+                    : activeTone.bg3,
+                  borderColor: selected
+                    ? activeTone.accent
+                    : activeTone.border,
+                },
+              ]}
+            >
+              <MaterialIcons
+                name={option.icon}
+                size={18}
+                color={
+                  selected
+                    ? isDark
+                      ? "#111113"
+                      : "#ffffff"
+                    : activeTone.accent
+                }
+                style={
+                  option.key === "ship"
+                    ? { transform: [{ rotate: "90deg" }] }
+                    : undefined
+                }
+              />
+              <Text
+                style={{
+                  color: selected
+                    ? isDark
+                      ? "#111113"
+                      : "#ffffff"
+                    : activeTone.fg,
+                  fontSize: 12,
+                  fontWeight: "900",
+                }}
+              >
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {mode === "wave" ? (
+        <GDWaveMode />
+      ) : (
+        <GDShipMode maxwellUnlocked={maxwellUnlocked} />
+      )}
+    </View>
+  );
+}
+
+function GDWaveMode() {
   const { activeTone, isDark } = useTheme();
   const { width } = useWindowDimensions();
   const textColor = isDark ? "#edebea" : "#2f3035";
 
   const arenaWidth = Math.max(280, width - 40);
-  const arenaHeight = 355;
+  const arenaHeight = 360;
   const playerX = 72;
   const playerSize = 20;
 
-  const [mode, setMode] = useState<CozyMode>("wave");
   const [running, setRunning] = useState(false);
   const [holding, setHolding] = useState(false);
   const [playerY, setPlayerY] = useState(arenaHeight / 2);
   const [elapsed, setElapsed] = useState(0);
-  const [waveBest, setWaveBest] = useState(0);
-  const [shipBest, setShipBest] = useState(0);
-  const [obstacles, setObstacles] = useState<CozyObstacle[]>([]);
-  const [spikes, setSpikes] = useState<CozySpike[]>([]);
+  const [best, setBest] = useState(0);
+  const [obstacles, setObstacles] = useState<WaveObstacle[]>([]);
+  const [spikes, setSpikes] = useState<WaveSpike[]>([]);
   const [trail, setTrail] = useState<number[]>([]);
 
   const runningRef = useRef(false);
   const holdingRef = useRef(false);
   const yRef = useRef(arenaHeight / 2);
-  const velocityRef = useRef(0);
-  const cameraYRef = useRef(0);
-  const holdDurationRef = useRef(0);
-  const releaseDurationRef = useRef(0);
   const elapsedRef = useRef(0);
-  const obstacleRef = useRef<CozyObstacle[]>([]);
-  const spikeRef = useRef<CozySpike[]>([]);
+  const obstacleRef = useRef<WaveObstacle[]>([]);
+  const spikeRef = useRef<WaveSpike[]>([]);
   const trailRef = useRef<number[]>([]);
   const frameRef = useRef<number | null>(null);
   const lastRef = useRef<number | null>(null);
   const obstacleIdRef = useRef(4);
   const spikeIdRef = useRef(1);
-  const nextSpikeAtRef = useRef(1.6);
-
-  const cloudA = useRef(new Animated.Value(0)).current;
-  const cloudB = useRef(new Animated.Value(0)).current;
-
-  const best = mode === "wave" ? waveBest : shipBest;
+  const nextSpikeAtRef = useRef(1.45);
 
   useEffect(() => {
-    Promise.all([
-      AsyncStorage.getItem(COZY_WAVE_HIGH_SCORE),
-      AsyncStorage.getItem(COZY_SHIP_HIGH_SCORE),
-    ])
-      .then(([wave, ship]) => {
-        const parsedWave = Number(wave);
-        const parsedShip = Number(ship);
-
-        if (Number.isFinite(parsedWave)) setWaveBest(parsedWave);
-        if (Number.isFinite(parsedShip)) setShipBest(parsedShip);
+    AsyncStorage.getItem(GD_WAVE_HIGH_SCORE_KEY)
+      .then((raw) => {
+        const parsed = Number(raw);
+        if (Number.isFinite(parsed)) setBest(parsed);
       })
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
-    const a = Animated.loop(
-      Animated.timing(cloudA, {
-        toValue: 1,
-        duration: 17000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    );
-
-    const b = Animated.loop(
-      Animated.timing(cloudB, {
-        toValue: 1,
-        duration: 23000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    );
-
-    a.start();
-    b.start();
-
-    return () => {
-      a.stop();
-      b.stop();
-    };
-  }, [cloudA, cloudB]);
-
-  const reset = (nextMode = mode) => {
-    const initial: CozyObstacle[] =
-      nextMode === "wave"
-        ? [
-            {
-              id: 1,
-              x: arenaWidth + 50,
-              width: 100,
-              height: 116,
-              side: "bottom",
-            },
-            {
-              id: 2,
-              x: arenaWidth + 225,
-              width: 112,
-              height: 128,
-              side: "top",
-            },
-            {
-              id: 3,
-              x: arenaWidth + 405,
-              width: 98,
-              height: 136,
-              side: "bottom",
-            },
-          ]
-        : [];
+  const reset = () => {
+    const initial: WaveObstacle[] = [
+      {
+        id: 1,
+        x: arenaWidth + 50,
+        width: 96,
+        height: 118,
+        side: "bottom",
+      },
+      {
+        id: 2,
+        x: arenaWidth + 220,
+        width: 108,
+        height: 128,
+        side: "top",
+      },
+      {
+        id: 3,
+        x: arenaWidth + 398,
+        width: 92,
+        height: 136,
+        side: "bottom",
+      },
+    ];
 
     obstacleIdRef.current = 4;
     spikeIdRef.current = 1;
-    nextSpikeAtRef.current = nextMode === "ship" ? 0.75 : 1.35;
-
-    yRef.current = nextMode === "ship" ? 0 : arenaHeight / 2;
-    cameraYRef.current = nextMode === "ship" ? 0 : arenaHeight / 2;
-    velocityRef.current = 0;
-    holdDurationRef.current = 0;
-    releaseDurationRef.current = 0;
+    nextSpikeAtRef.current = 1.35;
+    yRef.current = arenaHeight / 2;
     elapsedRef.current = 0;
     obstacleRef.current = initial;
     spikeRef.current = [];
     trailRef.current = [];
 
-    setPlayerY(arenaHeight / 2);
+    setPlayerY(yRef.current);
     setElapsed(0);
     setObstacles(initial);
     setSpikes([]);
     setTrail([]);
   };
 
-  const stop = async () => {
+  const endRun = async () => {
+    if (!runningRef.current) return;
+
     runningRef.current = false;
     setRunning(false);
     setHolding(false);
 
-    const score = elapsedRef.current;
-
-    if (mode === "wave" && score > waveBest) {
-      setWaveBest(score);
-      await AsyncStorage.setItem(COZY_WAVE_HIGH_SCORE, String(score));
-    }
-
-    if (mode === "ship" && score > shipBest) {
-      setShipBest(score);
-      await AsyncStorage.setItem(COZY_SHIP_HIGH_SCORE, String(score));
+    if (elapsedRef.current > best) {
+      setBest(elapsedRef.current);
+      await AsyncStorage.setItem(
+        GD_WAVE_HIGH_SCORE_KEY,
+        String(elapsedRef.current),
+      );
     }
 
     hapticsImpact(Haptics.ImpactFeedbackStyle.Heavy);
   };
 
-  const waveCollision = (y: number, obstacle: CozyObstacle) => {
+  const waveCollision = (
+    y: number,
+    obstacle: WaveObstacle,
+  ) => {
     const left = playerX - playerSize / 2;
     const right = playerX + playerSize / 2;
 
-    if (right < obstacle.x || left > obstacle.x + obstacle.width) {
+    if (
+      right < obstacle.x ||
+      left > obstacle.x + obstacle.width
+    ) {
       return false;
     }
 
-    const localX = Math.max(0, Math.min(obstacle.width, playerX - obstacle.x));
+    const localX = Math.max(
+      0,
+      Math.min(
+        obstacle.width,
+        playerX - obstacle.x,
+      ),
+    );
 
     const slope =
       obstacle.height *
       (1 -
-        Math.abs(localX - obstacle.width / 2) /
+        Math.abs(
+          localX - obstacle.width / 2,
+        ) /
           (obstacle.width / 2));
 
     return obstacle.side === "bottom"
-      ? y + playerSize / 2 >= arenaHeight - slope
+      ? y + playerSize / 2 >=
+          arenaHeight - slope
       : y - playerSize / 2 <= slope;
   };
 
   const spikeCollision = (
-    playerScreenY: number,
-    spike: CozySpike,
-    shipCameraY: number,
+    y: number,
+    spike: WaveSpike,
   ) => {
-    const spikeScreenY =
-      mode === "ship"
-        ? arenaHeight / 2 + (spike.y - shipCameraY)
-        : spike.y;
-
-    // spike.x is the LEFT edge of the visual triangle, so collision
-    // should use its center. Wave mode intentionally has a forgiving
-    // hitbox so near-misses actually feel like near-misses.
-    const spikeCenterX = spike.x + 11;
-    const horizontalRadius = mode === "wave" ? 11 : 13;
-    const verticalRadius = mode === "wave" ? 9 : 12;
+    const centerX = spike.x + 10;
 
     return (
-      Math.abs(spikeCenterX - playerX) < horizontalRadius &&
-      Math.abs(spikeScreenY - playerScreenY) < verticalRadius
+      Math.abs(centerX - playerX) < 8 &&
+      Math.abs(spike.y - y) < 7
     );
   };
 
   useEffect(() => {
-    if (!running) {
-      return;
-    }
+    if (!running) return;
 
     const tick = (time: number) => {
       if (!runningRef.current) return;
 
       const previous = lastRef.current ?? time;
-      const dt = Math.min(0.032, (time - previous) / 1000);
+      const dt = Math.min(
+        0.032,
+        (time - previous) / 1000,
+      );
       lastRef.current = time;
 
       elapsedRef.current += dt;
 
-      if (mode === "wave") {
-        // Slightly harder than the previous version.
-        const verticalSpeed = 178;
-        const nextY =
-          yRef.current + (holdingRef.current ? -verticalSpeed : verticalSpeed) * dt;
+      // Steeper Wave line: roughly a 63-degree visual incline/decline.
+      const verticalSpeed = 300;
+      const nextY =
+        yRef.current +
+        (holdingRef.current
+          ? -verticalSpeed
+          : verticalSpeed) *
+          dt;
 
-        const obstacleSpeed =
-          138 + Math.min(100, elapsedRef.current * 2.05);
+      const obstacleSpeed =
+        150 +
+        Math.min(
+          108,
+          elapsedRef.current * 2.15,
+        );
 
-        let nextObstacles = obstacleRef.current
+      let nextObstacles =
+        obstacleRef.current
           .map((item) => ({
             ...item,
             x: item.x - obstacleSpeed * dt,
           }))
-          .filter((item) => item.x + item.width > -30);
+          .filter(
+            (item) =>
+              item.x + item.width > -30,
+          );
 
-        const farthest = nextObstacles.reduce(
-          (max, item) => Math.max(max, item.x),
-          0,
-        );
+      const farthest = nextObstacles.reduce(
+        (maximum, item) =>
+          Math.max(maximum, item.x),
+        0,
+      );
 
-        if (farthest < arenaWidth + 205) {
-          const id = obstacleIdRef.current++;
+      if (farthest < arenaWidth + 190) {
+        const id = obstacleIdRef.current++;
 
-          nextObstacles.push({
-            id,
-            x: Math.max(
-              arenaWidth + 205,
-              farthest + 150 + (id % 3) * 28,
-            ),
-            width: 88 + (id % 4) * 11,
-            height: 108 + (id % 5) * 11,
-            side: id % 2 === 0 ? "top" : "bottom",
-          });
-        }
+        nextObstacles.push({
+          id,
+          x: Math.max(
+            arenaWidth + 190,
+            farthest +
+              142 +
+              (id % 3) * 27,
+          ),
+          width: 86 + (id % 4) * 10,
+          height:
+            112 + (id % 5) * 11,
+          side:
+            id % 2 === 0
+              ? "top"
+              : "bottom",
+        });
+      }
 
-        let nextSpikes = spikeRef.current.map((spike) => ({
+      let nextSpikes = spikeRef.current
+        .map((spike) => ({
           ...spike,
-          x: spike.x - (245 + Math.min(90, elapsedRef.current * 2.2)) * dt,
+          x:
+            spike.x -
+            (242 +
+              Math.min(
+                90,
+                elapsedRef.current * 2.1,
+              )) *
+              dt,
           y:
             spike.y +
             Math.sign(nextY - spike.y) *
-              Math.min(Math.abs(nextY - spike.y), 48 * dt),
-          rotation: spike.rotation + 320 * dt,
-        }));
+              Math.min(
+                Math.abs(nextY - spike.y),
+                42 * dt,
+              ),
+          rotation:
+            spike.rotation + 310 * dt,
+        }))
+        .filter((spike) => spike.x > -40);
 
-        if (elapsedRef.current >= nextSpikeAtRef.current) {
-          const id = spikeIdRef.current++;
-          const aimOffset = ((id % 5) - 2) * 34;
+      if (
+        elapsedRef.current >=
+        nextSpikeAtRef.current
+      ) {
+        const id = spikeIdRef.current++;
+        const offset =
+          ((id % 5) - 2) * 37;
 
-          nextSpikes.push({
-            id,
-            x: arenaWidth + 35,
-            y: Math.max(
-              38,
-              Math.min(arenaHeight - 38, nextY + aimOffset),
+        nextSpikes.push({
+          id,
+          x: arenaWidth + 35,
+          y: Math.max(
+            35,
+            Math.min(
+              arenaHeight - 35,
+              nextY + offset,
             ),
-            vy: 0,
-            rotation: 0,
-          });
-
-          nextSpikeAtRef.current =
-            elapsedRef.current +
-            Math.max(0.72, 1.55 - elapsedRef.current * 0.014);
-        }
-
-        nextSpikes = nextSpikes.filter((spike) => spike.x > -40);
-
-        const hitWall =
-          nextY - playerSize / 2 <= 7 ||
-          nextY + playerSize / 2 >= arenaHeight - 7;
-
-        const hitSlope = nextObstacles.some((item) =>
-          waveCollision(nextY, item),
-        );
-
-        const hitSpike = nextSpikes.some((spike) =>
-          spikeCollision(nextY, spike, 0),
-        );
-
-        if (hitWall || hitSlope || hitSpike) {
-          stop();
-          return;
-        }
-
-        yRef.current = nextY;
-        obstacleRef.current = nextObstacles;
-        spikeRef.current = nextSpikes;
-
-        const nextTrail = [
-          nextY,
-          ...trailRef.current,
-        ].slice(0, 18);
-        trailRef.current = nextTrail;
-
-        setPlayerY(nextY);
-        setObstacles(nextObstacles);
-        setSpikes(nextSpikes);
-        setTrail(nextTrail);
-      } else {
-        // Ship physics:
-        // - Holding progressively increases upward acceleration.
-        // - Releasing immediately bleeds off leftover upward momentum,
-        //   then downward acceleration ramps up the longer you stay released.
-        // This makes the controls much more responsive while keeping the
-        // "accelerating ship" feel.
-        if (holdingRef.current) {
-          holdDurationRef.current += dt;
-          releaseDurationRef.current = 0;
-
-          if (velocityRef.current > 0) {
-            velocityRef.current *= Math.pow(0.035, dt);
-          }
-
-          const upwardAcceleration =
-            205 +
-            Math.min(
-              210,
-              110 * Math.pow(holdDurationRef.current, 1.35),
-            );
-
-          velocityRef.current -= upwardAcceleration * dt;
-        } else {
-          releaseDurationRef.current += dt;
-          holdDurationRef.current = 0;
-
-          // Do not let a long hold leave the ship "stuck" travelling upward.
-          if (velocityRef.current < 0) {
-            velocityRef.current *= Math.pow(0.0025, dt);
-          }
-
-          const downwardAcceleration =
-            185 +
-            Math.min(
-              430,
-              175 * Math.pow(releaseDurationRef.current, 1.55),
-            );
-
-          velocityRef.current += downwardAcceleration * dt;
-        }
-
-        velocityRef.current = Math.max(
-          -300,
-          Math.min(365, velocityRef.current),
-        );
-
-        const nextWorldY =
-          yRef.current + velocityRef.current * dt;
-
-        // No ceiling / floor: camera follows the ship through open sky.
-        cameraYRef.current +=
-          (nextWorldY - cameraYRef.current) *
-          Math.min(1, dt * 6);
-
-        let nextSpikes = spikeRef.current.map((spike) => {
-          const verticalDelta = nextWorldY - spike.y;
-
-          return {
-            ...spike,
-            x:
-              spike.x -
-              (255 + Math.min(125, elapsedRef.current * 2.8)) * dt,
-            y:
-              spike.y +
-              Math.sign(verticalDelta) *
-                Math.min(
-                  Math.abs(verticalDelta),
-                  (88 + Math.min(85, elapsedRef.current * 1.2)) * dt,
-                ),
-            rotation: spike.rotation + 390 * dt,
-          };
+          ),
+          rotation: id * 19,
         });
 
-        if (elapsedRef.current >= nextSpikeAtRef.current) {
-          const amount = elapsedRef.current > 14 ? 2 : 1;
-
-          for (let index = 0; index < amount; index += 1) {
-            const id = spikeIdRef.current++;
-            const offset =
-              ((id * 53) % 230) -
-              115 +
-              index * 62;
-
-            nextSpikes.push({
-              id,
-              x: arenaWidth + 35 + index * 70,
-              y: nextWorldY + offset,
-              vy: 0,
-              rotation: id * 17,
-            });
-          }
-
-          nextSpikeAtRef.current =
-            elapsedRef.current +
-            Math.max(0.48, 1.05 - elapsedRef.current * 0.012);
-        }
-
-        nextSpikes = nextSpikes.filter((spike) => spike.x > -45);
-
-        const shipScreenY =
-          arenaHeight / 2 +
-          (nextWorldY - cameraYRef.current);
-
-        const hitSpike = nextSpikes.some((spike) =>
-          spikeCollision(
-            shipScreenY,
-            spike,
-            cameraYRef.current,
-          ),
-        );
-
-        if (hitSpike) {
-          stop();
-          return;
-        }
-
-        yRef.current = nextWorldY;
-        spikeRef.current = nextSpikes;
-
-        const nextTrail = [
-          shipScreenY,
-          ...trailRef.current,
-        ].slice(0, 22);
-        trailRef.current = nextTrail;
-
-        setPlayerY(shipScreenY);
-        setObstacles([]);
-        setSpikes(nextSpikes);
-        setTrail(nextTrail);
+        nextSpikeAtRef.current =
+          elapsedRef.current +
+          Math.max(
+            0.78,
+            1.55 -
+              elapsedRef.current * 0.012,
+          );
       }
 
+      const hitWall =
+        nextY - playerSize / 2 <= 6 ||
+        nextY + playerSize / 2 >=
+          arenaHeight - 6;
+
+      const hitSlope = nextObstacles.some(
+        (item) =>
+          waveCollision(nextY, item),
+      );
+
+      const hitSpike = nextSpikes.some(
+        (spike) =>
+          spikeCollision(nextY, spike),
+      );
+
+      if (hitWall || hitSlope || hitSpike) {
+        endRun();
+        return;
+      }
+
+      yRef.current = nextY;
+      obstacleRef.current = nextObstacles;
+      spikeRef.current = nextSpikes;
+
+      const nextTrail = [
+        nextY,
+        ...trailRef.current,
+      ].slice(0, 20);
+
+      trailRef.current = nextTrail;
+
+      setPlayerY(nextY);
       setElapsed(elapsedRef.current);
-      frameRef.current = requestAnimationFrame(tick);
+      setObstacles(nextObstacles);
+      setSpikes(nextSpikes);
+      setTrail(nextTrail);
+
+      frameRef.current =
+        requestAnimationFrame(tick);
     };
 
-    frameRef.current = requestAnimationFrame(tick);
+    frameRef.current =
+      requestAnimationFrame(tick);
 
     return () => {
       if (frameRef.current !== null) {
-        cancelAnimationFrame(frameRef.current);
+        cancelAnimationFrame(
+          frameRef.current,
+        );
         frameRef.current = null;
       }
-
       lastRef.current = null;
     };
-  }, [running, arenaWidth, mode, waveBest, shipBest]);
-
-  const beginControl = () => {
-    if (!runningRef.current) {
-      start();
-    }
-
-    setHolding(true);
-    holdingRef.current = true;
-    releaseDurationRef.current = 0;
-  };
-
-  const endControl = () => {
-    setHolding(false);
-    holdingRef.current = false;
-    holdDurationRef.current = 0;
-
-    if (mode === "ship" && velocityRef.current < 0) {
-      // On release, retain only a small amount of upward momentum.
-      // This prevents the ship from continuing to climb after the finger
-      // has clearly left the screen.
-      velocityRef.current *= 0.22;
-    }
-  };
+  }, [running, arenaWidth, best]);
 
   const start = () => {
-    reset(mode);
+    reset();
+    runningRef.current = true;
     holdingRef.current = false;
     setHolding(false);
-    runningRef.current = true;
     setRunning(true);
     lastRef.current = null;
-    hapticsImpact(Haptics.ImpactFeedbackStyle.Medium);
+    hapticsImpact(
+      Haptics.ImpactFeedbackStyle.Medium,
+    );
   };
 
-  const changeMode = (nextMode: CozyMode) => {
-    if (running) return;
-
-    setMode(nextMode);
-    reset(nextMode);
+  const begin = () => {
+    if (!runningRef.current) start();
+    holdingRef.current = true;
+    setHolding(true);
   };
 
-  const renderSpikeY = (spike: CozySpike) =>
-    mode === "ship"
-      ? arenaHeight / 2 +
-        (spike.y - cameraYRef.current)
-      : spike.y;
+  const end = () => {
+    holdingRef.current = false;
+    setHolding(false);
+  };
 
   return (
-    <View style={styles.panelBody}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.waveContent}
-      >
-        <View style={styles.waveModeRow}>
-          {[
-            {
-              key: "wave" as CozyMode,
-              title: "Wave",
-              icon: "change-history" as const,
-            },
-            {
-              key: "ship" as CozyMode,
-              title: "Ship",
-              icon: "flight" as const,
-            },
-          ].map((option) => {
-            const selected = mode === option.key;
-
-            return (
-              <Pressable
-                key={option.key}
-                disabled={running}
-                onPress={() => changeMode(option.key)}
-                style={[
-                  styles.waveModeButton,
-                  {
-                    backgroundColor: selected
-                      ? activeTone.accent
-                      : activeTone.bg3,
-                    borderColor: selected
-                      ? activeTone.accent
-                      : activeTone.border,
-                    opacity: running && !selected ? 0.45 : 1,
-                  },
-                ]}
-              >
-                <MaterialIcons
-                  name={option.icon}
-                  size={18}
-                  color={
-                    selected
-                      ? isDark
-                        ? "#111113"
-                        : "#ffffff"
-                      : activeTone.accent
-                  }
-                />
-
-                <Text
-                  style={{
-                    color: selected
-                      ? isDark
-                        ? "#111113"
-                        : "#ffffff"
-                      : textColor,
-                    fontSize: 12,
-                    fontWeight: "900",
-                  }}
-                >
-                  {option.title}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <View style={styles.waveScoreRow}>
-          <View>
-            <Text
-              style={[
-                styles.waveScoreLabel,
-                { color: activeTone.muted },
-              ]}
-            >
-              CURRENT
-            </Text>
-
-            <Text
-              style={[
-                styles.waveScoreValue,
-                { color: textColor },
-              ]}
-            >
-              {elapsed.toFixed(2)}s
-            </Text>
-          </View>
-
-          <View style={{ alignItems: "flex-end" }}>
-            <Text
-              style={[
-                styles.waveScoreLabel,
-                { color: activeTone.muted },
-              ]}
-            >
-              {mode === "wave" ? "WAVE BEST" : "SHIP BEST"}
-            </Text>
-
-            <Text
-              style={[
-                styles.waveScoreValue,
-                { color: activeTone.accent },
-              ]}
-            >
-              {best.toFixed(2)}s
-            </Text>
-          </View>
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={styles.waveContent}
+    >
+      <View style={styles.waveScoreRow}>
+        <View>
+          <Text
+            style={[
+              styles.waveScoreLabel,
+              { color: activeTone.muted },
+            ]}
+          >
+            CURRENT
+          </Text>
+          <Text
+            style={[
+              styles.waveScoreValue,
+              { color: textColor },
+            ]}
+          >
+            {elapsed.toFixed(2)}s
+          </Text>
         </View>
 
         <View
-          onStartShouldSetResponder={() => true}
-          onMoveShouldSetResponder={() => true}
-          onResponderTerminationRequest={() => false}
-          onResponderGrant={beginControl}
-          onResponderRelease={endControl}
-          onResponderTerminate={endControl}
+          style={{ alignItems: "flex-end" }}
+        >
+          <Text
+            style={[
+              styles.waveScoreLabel,
+              { color: activeTone.muted },
+            ]}
+          >
+            BEST
+          </Text>
+          <Text
+            style={[
+              styles.waveScoreValue,
+              {
+                color: activeTone.accent,
+              },
+            ]}
+          >
+            {best.toFixed(2)}s
+          </Text>
+        </View>
+      </View>
+
+      <View
+        onStartShouldSetResponder={() => true}
+        onMoveShouldSetResponder={() => true}
+        onResponderTerminationRequest={() =>
+          false
+        }
+        onResponderGrant={begin}
+        onResponderRelease={end}
+        onResponderTerminate={end}
+        style={[
+          styles.waveArena,
+          {
+            height: arenaHeight,
+            backgroundColor: activeTone.bg2,
+            borderColor: activeTone.border,
+          },
+        ]}
+      >
+        <View
           style={[
-            styles.waveArena,
+            styles.waveGlow,
             {
-              height: arenaHeight,
-              backgroundColor: activeTone.bg2,
-              borderColor: activeTone.border,
+              backgroundColor: `${activeTone.accent}17`,
             },
           ]}
-        >
-          <View
-            style={[
-              styles.waveGlow,
-              {
-                backgroundColor: `${activeTone.accent}18`,
-              },
-            ]}
-          />
+        />
 
-          <Animated.View
-            style={[
-              styles.waveCloud,
-              {
-                top: 48,
-                opacity: 0.27,
-                transform: [
-                  {
-                    translateX: cloudA.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [
-                        -155,
-                        arenaWidth + 185,
-                      ],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          >
-            <View style={styles.waveCloudBase} />
-            <View style={styles.waveCloudTop} />
-          </Animated.View>
+        {trail.map((trailY, index) => {
+          const dotSize = Math.max(
+            2,
+            7 - index * 0.24,
+          );
 
-          <Animated.View
-            style={[
-              styles.waveCloud,
-              {
-                top: 126,
-                opacity: 0.15,
-                transform: [
-                  {
-                    translateX: cloudB.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [
-                        arenaWidth + 155,
-                        -195,
-                      ],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          >
-            <View style={styles.waveCloudBase} />
-            <View style={styles.waveCloudTop} />
-          </Animated.View>
-
-          {trail.map((trailY, index) => (
+          return (
             <View
               key={`${index}-${trailY}`}
               style={[
                 styles.waveTrailDot,
                 {
-                  left: playerX - 10 - index * 7,
-                  top: trailY - 3,
-                  width: Math.max(2, 7 - index * 0.25),
-                  height: Math.max(2, 7 - index * 0.25),
-                  borderRadius: 6,
-                  backgroundColor: activeTone.accent,
+                  left:
+                    playerX -
+                    9 -
+                    index * 7,
+                  // Center each trail dot on the exact triangle centerline.
+                  top:
+                    trailY -
+                    dotSize / 2,
+                  width: dotSize,
+                  height: dotSize,
+                  borderRadius: dotSize,
+                  backgroundColor:
+                    activeTone.accent,
                   opacity: Math.max(
                     0.05,
-                    0.56 - index * 0.028,
+                    0.58 -
+                      index * 0.027,
                   ),
                 },
               ]}
             />
-          ))}
+          );
+        })}
 
-          {mode === "wave" ? (
-            <Svg
-              width={arenaWidth}
-              height={arenaHeight}
-              style={StyleSheet.absoluteFillObject}
-              pointerEvents="none"
-            >
-              {obstacles.map((item) => (
-                <Polygon
-                  key={item.id}
-                  points={
-                    item.side === "bottom"
-                      ? `${item.x},${arenaHeight} ${item.x + item.width / 2},${arenaHeight - item.height} ${item.x + item.width},${arenaHeight}`
-                      : `${item.x},0 ${item.x + item.width / 2},${item.height} ${item.x + item.width},0`
-                  }
-                  fill={`${activeTone.accent}3F`}
-                  stroke={activeTone.accent}
-                  strokeWidth={2}
-                />
-              ))}
-            </Svg>
-          ) : null}
-
-          {spikes.map((spike) => {
-            const y = renderSpikeY(spike);
-
-            if (y < -45 || y > arenaHeight + 45) {
-              return null;
-            }
-
-            return (
-              <View
-                key={spike.id}
-                style={[
-                  styles.waveSpike,
-                  {
-                    left: spike.x,
-                    top: y - 10,
-                    borderRightColor: activeTone.accent,
-                    transform: [
-                      {
-                        rotate: `${spike.rotation}deg`,
-                      },
-                    ],
-                  },
-                ]}
-              />
-            );
-          })}
-
-          {mode === "wave" ? (
-            <View
-              style={[
-                styles.wavePlayer,
-                {
-                  left: playerX - playerSize / 2,
-                  top: playerY - playerSize / 2,
-                  borderLeftColor: activeTone.accent,
-                  transform: [
-                    {
-                      rotate: holding
-                        ? "-45deg"
-                        : "45deg",
-                    },
-                  ],
-                },
-              ]}
-            />
-          ) : (
-            <View
-              style={[
-                styles.shipPlayer,
-                {
-                  left: playerX - 18,
-                  top: playerY - 18,
-                  backgroundColor: `${activeTone.accent}24`,
-                  borderColor: activeTone.accent,
-                  transform: [
-                    {
-                      rotate: `${Math.max(
-                        -24,
-                        Math.min(
-                          24,
-                          velocityRef.current * 0.09,
-                        ),
-                      )}deg`,
-                    },
-                  ],
-                },
-              ]}
-            >
-              <MaterialIcons
-                name="flight"
-                size={26}
-                color={activeTone.accent}
-                style={{
-                  transform: [{ rotate: "90deg" }],
-                }}
-              />
-            </View>
-          )}
-
-          {!running ? (
-            <View
-              style={styles.waveStart}
-              pointerEvents="none"
-            >
-              <MaterialIcons
-                name={
-                  mode === "wave"
-                    ? "change-history"
-                    : "flight"
-                }
-                size={38}
-                color={activeTone.accent}
-                style={
-                  mode === "ship"
-                    ? {
-                        transform: [
-                          { rotate: "90deg" },
-                        ],
-                      }
-                    : undefined
-                }
-              />
-
-              <Text
-                style={[
-                  styles.waveStartTitle,
-                  { color: textColor },
-                ]}
-              >
-                {elapsed > 0
-                  ? "Try again"
-                  : mode === "wave"
-                    ? "Cozy Wave"
-                    : "Cozy Ship"}
-              </Text>
-
-              <Text
-                style={[
-                  styles.waveStartText,
-                  { color: activeTone.muted },
-                ]}
-              >
-                {mode === "wave"
-                  ? "Hold to climb at 45°. Release to descend. Dodge slopes and incoming spikes."
-                  : "Hold to accelerate upward. Release and gravity accelerates you downward. Dodge the chasing spikes."}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-
-        <Text
-          style={[
-            styles.waveHint,
-            { color: activeTone.muted },
-          ]}
+        <Svg
+          width={arenaWidth}
+          height={arenaHeight}
+          style={StyleSheet.absoluteFillObject}
+          pointerEvents="none"
         >
-          {mode === "wave"
-            ? "Wave mode is faster now, with tighter slopes and occasional launched spikes."
-            : "Ship mode has no ceiling or floor. The camera follows you through open sky while more spikes hunt the plane."}
-        </Text>
-      </ScrollView>
-    </View>
+          {obstacles.map((item) => (
+            <Polygon
+              key={item.id}
+              points={
+                item.side === "bottom"
+                  ? `${item.x},${arenaHeight} ${item.x + item.width / 2},${arenaHeight - item.height} ${item.x + item.width},${arenaHeight}`
+                  : `${item.x},0 ${item.x + item.width / 2},${item.height} ${item.x + item.width},0`
+              }
+              fill={`${activeTone.accent}3D`}
+              stroke={activeTone.accent}
+              strokeWidth={2}
+            />
+          ))}
+        </Svg>
+
+        {spikes.map((spike) => (
+          <View
+            key={spike.id}
+            style={[
+              styles.waveSpike,
+              {
+                left: spike.x,
+                top: spike.y - 9,
+                borderRightColor:
+                  activeTone.accent,
+                transform: [
+                  {
+                    rotate: `${spike.rotation}deg`,
+                  },
+                ],
+              },
+            ]}
+          />
+        ))}
+
+        <View
+          style={[
+            styles.wavePlayer,
+            {
+              left:
+                playerX -
+                playerSize / 2,
+              top:
+                playerY -
+                playerSize / 2,
+              borderLeftColor:
+                activeTone.accent,
+              transform: [
+                {
+                  rotate: holding
+                    ? "-63deg"
+                    : "63deg",
+                },
+              ],
+            },
+          ]}
+        />
+
+        {!running ? (
+          <View
+            style={styles.waveStart}
+            pointerEvents="none"
+          >
+            <MaterialIcons
+              name="change-history"
+              size={38}
+              color={activeTone.accent}
+            />
+            <Text
+              style={[
+                styles.waveStartTitle,
+                { color: textColor },
+              ]}
+            >
+              {elapsed > 0
+                ? "Try again"
+                : "GD Wave Mockup"}
+            </Text>
+            <Text
+              style={[
+                styles.waveStartText,
+                { color: activeTone.muted },
+              ]}
+            >
+              Hold to ascend, release to descend
+            </Text>
+          </View>
+        ) : null}
+      </View>
+
+    </ScrollView>
   );
 }
 
-type GPTMessage = { id: string; role: "user" | "assistant"; text: string };
-const OPENAI_KEY_STORAGE = "ta_plus_openai_api_key";
+function GDShipMode({ maxwellUnlocked }: { maxwellUnlocked: boolean }) {
+  return <GDShipGame maxwellUnlocked={maxwellUnlocked} />;
+}
+
+
+type GPTMessage = {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+};
+
+const GROQ_API_KEY_STORAGE = "ta_plus_groq_api_key";
+const GROQ_CHAT_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
+const GROQ_MODELS_ENDPOINT = "https://api.groq.com/openai/v1/models";
+const GROQ_KEYS_URL = "https://console.groq.com/keys";
+const GROQ_MODEL = "openai/gpt-oss-20b";
+
+const groqSystemPrompt = `
+You are the built-in AI assistant inside TeachAssist+.
+Be useful, concise, accurate, and clear.
+You can help with schoolwork, explanations, planning, studying, writing,
+brainstorming, math reasoning, and ordinary questions.
+Do not claim to have live web access or private school data unless the user
+provided that information in the conversation.
+`.trim();
+
+const describeGroqError = (
+  status: number,
+  data: any,
+) => {
+  const apiMessage =
+    typeof data?.error?.message === "string"
+      ? data.error.message
+      : "";
+
+  if (status === 401) {
+    return "That Groq API key was rejected. Create a new key in the Groq Console and paste it again.";
+  }
+
+  if (status === 429) {
+    return "You reached a Groq free-tier rate limit. Wait for the limit to reset, then try again.";
+  }
+
+  if (status === 403) {
+    return apiMessage || "Groq refused this request for the current account or project.";
+  }
+
+  if (status >= 500) {
+    return "Groq is temporarily unavailable. Try again in a moment.";
+  }
+
+  return apiMessage || `Groq request failed (${status}).`;
+};
 
 function GPTAccessPanel() {
   const { activeTone, isDark } = useTheme();
   const textColor = isDark ? "#edebea" : "#2f3035";
   const muted = activeTone.muted;
+
   const [apiKey, setApiKey] = useState("");
   const [stored, setStored] = useState(false);
+  const [checkingKey, setCheckingKey] = useState(false);
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<GPTMessage[]>([]);
   const [sending, setSending] = useState(false);
 
   useEffect(() => {
-    SecureStorage.load(OPENAI_KEY_STORAGE).then((value) => {
-      if (value) {
-        setApiKey(value);
-        setStored(true);
-      }
-    });
+    SecureStorage.load(GROQ_API_KEY_STORAGE)
+      .then((value) => {
+        if (value?.trim()) {
+          setApiKey(value.trim());
+          setStored(true);
+        }
+      })
+      .catch(() => {});
   }, []);
+
+  const validateGroqKey = async (key: string) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    try {
+      const response = await fetch(GROQ_MODELS_ENDPOINT, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${key}`,
+        },
+        signal: controller.signal,
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(describeGroqError(response.status, data));
+      }
+
+      return true;
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
 
   const saveKey = async () => {
     const clean = apiKey.trim();
-    if (!clean.startsWith("sk-")) {
-      Alert.alert("Check API key", "Paste an OpenAI API key that starts with sk-.");
+
+    if (clean.length < 20) {
+      Alert.alert(
+        "Check Groq API key",
+        "Paste the full API key copied from the Groq Console.",
+      );
       return;
     }
-    await SecureStorage.save(OPENAI_KEY_STORAGE, clean);
-    setStored(true);
-    hapticsImpact(Haptics.ImpactFeedbackStyle.Medium);
+
+    setCheckingKey(true);
+
+    try {
+      await validateGroqKey(clean);
+      await SecureStorage.save(GROQ_API_KEY_STORAGE, clean);
+      setApiKey(clean);
+      setStored(true);
+      hapticsImpact(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Could not validate the Groq API key.";
+
+      Alert.alert("Groq connection failed", message);
+    } finally {
+      setCheckingKey(false);
+    }
   };
 
   const removeKey = async () => {
-    await SecureStorage.delete(OPENAI_KEY_STORAGE);
+    await SecureStorage.delete(GROQ_API_KEY_STORAGE);
     setApiKey("");
     setStored(false);
     setMessages([]);
+    setDraft("");
+    hapticsImpact(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const openGroqKeys = async () => {
+    try {
+      await Linking.openURL(GROQ_KEYS_URL);
+    } catch {
+      Alert.alert(
+        "Open Groq Console",
+        "Go to console.groq.com, sign in, then open API Keys.",
+      );
+    }
   };
 
   const send = async () => {
     const question = draft.trim();
-    if (!question || sending) return;
-    const key = (await SecureStorage.load(OPENAI_KEY_STORAGE))?.trim();
-    if (!key) {
-      Alert.alert("Connect API", "Add your OpenAI API key first.");
+
+    if (!question || sending) {
       return;
     }
 
-    const userMessage: GPTMessage = { id: `u-${Date.now()}`, role: "user", text: question };
+    const key =
+      (await SecureStorage.load(GROQ_API_KEY_STORAGE))?.trim();
+
+    if (!key) {
+      setStored(false);
+      Alert.alert(
+        "Groq API key required",
+        "Add your free Groq API key first.",
+      );
+      return;
+    }
+
+    const userMessage: GPTMessage = {
+      id: `u-${Date.now()}`,
+      role: "user",
+      text: question,
+    };
+
     const nextMessages = [...messages, userMessage];
+
     setMessages(nextMessages);
     setDraft("");
     setSending(true);
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 45000);
+
     try {
-      const input = nextMessages.slice(-12).map((message) => ({
-        role: message.role,
-        content: message.text,
-      }));
-      const response = await fetch("https://api.openai.com/v1/responses", {
+      const conversation = nextMessages
+        .slice(-12)
+        .map((message) => ({
+          role: message.role,
+          content: message.text,
+        }));
+
+      const response = await fetch(GROQ_CHAT_ENDPOINT, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${key}`,
         },
         body: JSON.stringify({
-          model: "gpt-5",
-          store: false,
-          input,
+          model: GROQ_MODEL,
+          messages: [
+            {
+              role: "system",
+              content: groqSystemPrompt,
+            },
+            ...conversation,
+          ],
+          temperature: 0.7,
+          max_completion_tokens: 1400,
         }),
+        signal: controller.signal,
       });
-      const data = await response.json();
+
+      const data = await response.json().catch(() => null);
+
       if (!response.ok) {
-        throw new Error(data?.error?.message ?? `OpenAI ${response.status}`);
+        throw new Error(describeGroqError(response.status, data));
       }
 
-      let answer = typeof data?.output_text === "string" ? data.output_text : "";
-      if (!answer && Array.isArray(data?.output)) {
-        answer = data.output
-          .flatMap((item: any) => (Array.isArray(item?.content) ? item.content : []))
-          .filter((item: any) => item?.type === "output_text" && typeof item?.text === "string")
-          .map((item: any) => item.text)
-          .join("\n")
-          .trim();
+      const answer =
+        data?.choices?.[0]?.message?.content;
+
+      if (typeof answer !== "string" || !answer.trim()) {
+        throw new Error("Groq returned an empty response.");
       }
-      if (!answer) answer = "No text response was returned.";
+
       setMessages((current) => [
         ...current,
-        { id: `a-${Date.now()}`, role: "assistant", text: answer },
+        {
+          id: `a-${Date.now()}`,
+          role: "assistant",
+          text: answer.trim(),
+        },
       ]);
+
+      hapticsImpact(Haptics.ImpactFeedbackStyle.Light);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Request failed";
+      const message =
+        error instanceof Error
+          ? error.name === "AbortError"
+            ? "The request timed out. Try again."
+            : error.message
+          : "Groq request failed.";
+
       Alert.alert("GPT request failed", message);
     } finally {
+      clearTimeout(timeout);
       setSending(false);
     }
   };
@@ -2217,16 +2511,179 @@ function GPTAccessPanel() {
   if (!stored) {
     return (
       <View style={styles.panelBody}>
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.panelContent}>
-          <LiquidGlassView className="rounded-2xl overflow-hidden" fallbackBackgroundColor={activeTone.bg3} glassTintColor={activeTone.bg2} glassEffectStyle="clear">
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.panelContent}
+        >
+          <LiquidGlassView
+            className="rounded-2xl overflow-hidden"
+            fallbackBackgroundColor={activeTone.bg3}
+            glassTintColor={activeTone.bg2}
+            glassEffectStyle="clear"
+          >
             <View style={styles.gptConnectCard}>
-              <MaterialIcons name="auto-awesome" size={35} color={activeTone.accent} />
-              <Text style={[styles.gptConnectTitle, { color: textColor }]}>Connect OpenAI</Text>
-              <Text style={[styles.gptConnectText, { color: muted }]}>GPT Access uses the OpenAI API inside a TeachAssist+ interface. Your API key is stored in the app's secure storage.</Text>
-              <TextInput value={apiKey} onChangeText={setApiKey} secureTextEntry autoCapitalize="none" autoCorrect={false} placeholder="sk-..." placeholderTextColor={muted} style={[styles.gptKeyInput, { color: textColor, backgroundColor: activeTone.bg2, borderColor: activeTone.border }]} />
-              <Pressable onPress={saveKey} style={[styles.gptSaveKey, { backgroundColor: activeTone.accent }]}>
-                <Text style={{ color: isDark ? "#111113" : "#ffffff", fontWeight: "900" }}>Save API Key</Text>
+              <MaterialIcons
+                name="auto-awesome"
+                size={35}
+                color={activeTone.accent}
+              />
+
+              <Text
+                style={[
+                  styles.gptConnectTitle,
+                  { color: textColor },
+                ]}
+              >
+                Connect Groq
+              </Text>
+
+              <Text
+                style={[
+                  styles.gptConnectText,
+                  { color: muted },
+                ]}
+              >
+                GPT Access uses Groq's free API tier and stores your key in
+                TeachAssist+'s secure storage.
+              </Text>
+
+              <View
+                style={[
+                  styles.groqInstructions,
+                  {
+                    backgroundColor: activeTone.bg2,
+                    borderColor: activeTone.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.groqInstructionsTitle,
+                    { color: textColor },
+                  ]}
+                >
+                  How to get your free API key
+                </Text>
+
+                <Text
+                  style={[
+                    styles.groqInstructionLine,
+                    { color: muted },
+                  ]}
+                >
+                  1. Open the Groq Console and sign in or create an account.
+                </Text>
+
+                <Text
+                  style={[
+                    styles.groqInstructionLine,
+                    { color: muted },
+                  ]}
+                >
+                  2. Open API Keys and choose Create API Key.
+                </Text>
+
+                <Text
+                  style={[
+                    styles.groqInstructionLine,
+                    { color: muted },
+                  ]}
+                >
+                  3. Copy the new key and paste it below.
+                </Text>
+
+                <Text
+                  style={[
+                    styles.groqInstructionLine,
+                    { color: muted },
+                  ]}
+                >
+                  4. Stay on Groq's Free plan if you only want free-tier usage.
+                </Text>
+
+                <Pressable
+                  onPress={openGroqKeys}
+                  style={[
+                    styles.groqOpenButton,
+                    {
+                      backgroundColor: activeTone.bg4,
+                      borderColor: activeTone.border,
+                    },
+                  ]}
+                >
+                  <MaterialIcons
+                    name="open-in-new"
+                    size={17}
+                    color={activeTone.accent}
+                  />
+
+                  <Text
+                    style={{
+                      color: activeTone.accent,
+                      fontWeight: "900",
+                      fontSize: 12,
+                    }}
+                  >
+                    Open Groq API Keys
+                  </Text>
+                </Pressable>
+              </View>
+
+              <TextInput
+                value={apiKey}
+                onChangeText={setApiKey}
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="Paste Groq API key"
+                placeholderTextColor={muted}
+                style={[
+                  styles.gptKeyInput,
+                  {
+                    color: textColor,
+                    backgroundColor: activeTone.bg2,
+                    borderColor: activeTone.border,
+                  },
+                ]}
+              />
+
+              <Pressable
+                onPress={saveKey}
+                disabled={checkingKey || !apiKey.trim()}
+                style={[
+                  styles.gptSaveKey,
+                  {
+                    backgroundColor: activeTone.accent,
+                    opacity:
+                      checkingKey || !apiKey.trim()
+                        ? 0.5
+                        : 1,
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    color: isDark ? "#111113" : "#ffffff",
+                    fontWeight: "900",
+                  }}
+                >
+                  {checkingKey
+                    ? "Checking Key..."
+                    : "Save & Connect"}
+                </Text>
               </Pressable>
+
+              <Text
+                style={[
+                  styles.groqFinePrint,
+                  { color: muted },
+                ]}
+              >
+                Provider: Groq • Model: GPT-OSS 20B. Free accounts are
+                rate-limited, so very heavy use can temporarily return a
+                limit message.
+              </Text>
             </View>
           </LiquidGlassView>
         </ScrollView>
@@ -2236,28 +2693,182 @@ function GPTAccessPanel() {
 
   return (
     <View style={styles.panelBody}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.gptMessages}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.gptMessages}
+      >
         {messages.length === 0 ? (
           <View style={styles.gptEmpty}>
-            <MaterialIcons name="forum" size={38} color={muted} />
-            <Text style={[styles.gptEmptyTitle, { color: textColor }]}>Ask anything</Text>
-            <Text style={[styles.gptConnectText, { color: muted }]}>GPT responses appear here without leaving TeachAssist+.</Text>
+            <MaterialIcons
+              name="forum"
+              size={38}
+              color={muted}
+            />
+
+            <Text
+              style={[
+                styles.gptEmptyTitle,
+                { color: textColor },
+              ]}
+            >
+              Ask anything
+            </Text>
+
+            <Text
+              style={[
+                styles.gptConnectText,
+                { color: muted },
+              ]}
+            >
+              Powered by Groq using GPT-OSS 20B.
+            </Text>
+
+            <View
+              style={[
+                styles.groqConnectedPill,
+                {
+                  backgroundColor: activeTone.bg4,
+                  borderColor: activeTone.border,
+                },
+              ]}
+            >
+              <MaterialIcons
+                name="bolt"
+                size={15}
+                color={activeTone.accent}
+              />
+
+              <Text
+                style={[
+                  styles.groqConnectedText,
+                  { color: activeTone.accent },
+                ]}
+              >
+                Groq connected
+              </Text>
+            </View>
           </View>
         ) : null}
+
         {messages.map((message) => (
-          <View key={message.id} style={[styles.gptBubble, { alignSelf: message.role === "user" ? "flex-end" : "flex-start", backgroundColor: message.role === "user" ? activeTone.accent : activeTone.bg3 }]}>
-            <Text style={{ color: message.role === "user" ? (isDark ? "#111113" : "#ffffff") : textColor, fontSize: 14, lineHeight: 20 }}>{message.text}</Text>
+          <View
+            key={message.id}
+            style={[
+              styles.gptBubble,
+              {
+                alignSelf:
+                  message.role === "user"
+                    ? "flex-end"
+                    : "flex-start",
+                backgroundColor:
+                  message.role === "user"
+                    ? activeTone.accent
+                    : activeTone.bg3,
+              },
+            ]}
+          >
+            <Text
+              style={{
+                color:
+                  message.role === "user"
+                    ? isDark
+                      ? "#111113"
+                      : "#ffffff"
+                    : textColor,
+                fontSize: 14,
+                lineHeight: 20,
+              }}
+            >
+              {message.text}
+            </Text>
           </View>
         ))}
-        {sending ? <Text style={{ color: muted, marginTop: 8 }}>Thinking…</Text> : null}
+
+        {sending ? (
+          <View style={styles.groqThinking}>
+            <MaterialIcons
+              name="bolt"
+              size={16}
+              color={activeTone.accent}
+            />
+            <Text style={{ color: muted }}>
+              Groq is thinking…
+            </Text>
+          </View>
+        ) : null}
       </ScrollView>
-      <View style={[styles.gptComposer, { borderTopColor: activeTone.border, backgroundColor: activeTone.bg1 }]}>
-        <Pressable onPress={removeKey} hitSlop={8} style={styles.gptKeyButton}>
-          <MaterialIcons name="key-off" size={20} color={muted} />
+
+      <View
+        style={[
+          styles.gptComposer,
+          {
+            borderTopColor: activeTone.border,
+            backgroundColor: activeTone.bg1,
+          },
+        ]}
+      >
+        <Pressable
+          onPress={() => {
+            Alert.alert(
+              "Remove Groq API key?",
+              "You will need to paste a Groq key again before using GPT Access.",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Remove",
+                  style: "destructive",
+                  onPress: removeKey,
+                },
+              ],
+            );
+          }}
+          hitSlop={8}
+          style={styles.gptKeyButton}
+        >
+          <MaterialIcons
+            name="key-off"
+            size={20}
+            color={muted}
+          />
         </Pressable>
-        <TextInput value={draft} onChangeText={setDraft} onSubmitEditing={send} returnKeyType="send" placeholder="Ask GPT…" placeholderTextColor={muted} style={[styles.gptInput, { color: textColor, backgroundColor: activeTone.bg3 }]} />
-        <Pressable onPress={send} disabled={sending || !draft.trim()} style={[styles.gptSend, { backgroundColor: activeTone.accent, opacity: sending || !draft.trim() ? 0.45 : 1 }]}>
-          <MaterialIcons name="arrow-upward" size={22} color={isDark ? "#111113" : "#ffffff"} />
+
+        <TextInput
+          value={draft}
+          onChangeText={setDraft}
+          onSubmitEditing={send}
+          returnKeyType="send"
+          blurOnSubmit={false}
+          placeholder="Ask GPT…"
+          placeholderTextColor={muted}
+          style={[
+            styles.gptInput,
+            {
+              color: textColor,
+              backgroundColor: activeTone.bg3,
+            },
+          ]}
+        />
+
+        <Pressable
+          onPress={send}
+          disabled={sending || !draft.trim()}
+          style={[
+            styles.gptSend,
+            {
+              backgroundColor: activeTone.accent,
+              opacity:
+                sending || !draft.trim()
+                  ? 0.45
+                  : 1,
+            },
+          ]}
+        >
+          <MaterialIcons
+            name="arrow-upward"
+            size={22}
+            color={isDark ? "#111113" : "#ffffff"}
+          />
         </Pressable>
       </View>
     </View>
@@ -2605,7 +3216,9 @@ const styles = StyleSheet.create({
   waveModeRow: {
     flexDirection: "row",
     gap: 8,
-    marginBottom: 14,
+    marginHorizontal: 20,
+    marginTop: 8,
+    marginBottom: 8,
   },
 
   waveModeButton: {
@@ -2650,33 +3263,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
 
-  waveCloud: {
-    position: "absolute",
-    left: 0,
-    width: 120,
-    height: 52,
-  },
-
-  waveCloudBase: {
-    position: "absolute",
-    left: 0,
-    top: 15,
-    width: 95,
-    height: 31,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.76)",
-  },
-
-  waveCloudTop: {
-    position: "absolute",
-    left: 32,
-    top: 0,
-    width: 58,
-    height: 44,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.76)",
-  },
-
   waveTrailDot: {
     position: "absolute",
     zIndex: 7,
@@ -2691,17 +3277,6 @@ const styles = StyleSheet.create({
     borderLeftWidth: 20,
     borderTopColor: "transparent",
     borderBottomColor: "transparent",
-    zIndex: 10,
-  },
-
-  shipPlayer: {
-    position: "absolute",
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
     zIndex: 10,
   },
 
@@ -2745,21 +3320,414 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
 
-  gptDisableButton: {
-    alignSelf: "flex-start",
-    minHeight: 30,
-    borderRadius: 10,
+  shipMenuContent: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 70,
+  },
+
+  shipTaskBonusPopup: {
+    minHeight: 42,
+    borderRadius: 14,
+    marginBottom: 10,
+    paddingHorizontal: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+
+  shipMenuTopRow: {
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+
+  shipSmallButton: {
+    minHeight: 38,
+    borderRadius: 12,
     borderWidth: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 9,
-    marginTop: 12,
+    gap: 6,
+    paddingHorizontal: 11,
   },
 
-  gptDisableText: {
-    fontSize: 10,
+  shipCreditsPill: {
+    minHeight: 38,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 11,
+  },
+
+  shipBestText: {
+    fontSize: 12,
     fontWeight: "800",
+  },
+
+  shipHero: {
+    paddingHorizontal: 18,
+    paddingVertical: 20,
+    alignItems: "center",
+  },
+
+  shipMenuEyebrow: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+  },
+
+  shipHeroGraphic: {
+    width: 154,
+    height: 105,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 14,
+    marginBottom: 13,
+  },
+
+  shipMenuTitle: {
+    fontSize: 25,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+
+  shipMenuSubtitle: {
+    fontSize: 11,
+    lineHeight: 17,
+    textAlign: "center",
+    marginTop: 6,
+    paddingHorizontal: 8,
+  },
+
+  shipLastRun: {
+    minWidth: 150,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 14,
+    alignItems: "center",
+  },
+
+  shipMainButton: {
+    minHeight: 52,
+    borderRadius: 15,
+    marginTop: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+
+  shipSecondaryButton: {
+    minHeight: 48,
+    borderRadius: 15,
+    borderWidth: 1,
+    marginTop: 9,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+
+  shipFullscreenRow: {
+    minHeight: 64,
+    borderRadius: 15,
+    borderWidth: 1,
+    marginTop: 9,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  shipStoreRow: {
+    minHeight: 118,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+  },
+
+  shipStoreGraphic: {
+    width: 82,
+    height: 74,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  shipStoreName: {
+    fontSize: 15,
+    fontWeight: "900",
+  },
+
+  shipStoreDescription: {
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 3,
+  },
+
+  shipBuyButton: {
+    minWidth: 70,
+    minHeight: 38,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+  },
+
+  shipEmbeddedRoot: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 45,
+  },
+
+  shipFullscreenRoot: {
+    flex: 1,
+  },
+
+  shipGameTopBar: {
+    minHeight: 56,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 8,
+  },
+
+  shipGameExit: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  shipGameSkinBadge: {
+    width: 50,
+    height: 40,
+    borderRadius: 13,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+
+  shipFlightArena: {
+    alignSelf: "center",
+    borderRadius: 22,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+
+  shipSkyTint: {
+    ...StyleSheet.absoluteFillObject,
+  },
+
+  shipCloudGraphic: {
+    position: "absolute",
+    width: 128,
+    height: 55,
+  },
+
+  shipCloudBase: {
+    position: "absolute",
+    left: 0,
+    top: 18,
+    width: 102,
+    height: 31,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.14)",
+  },
+
+  shipCloudTop: {
+    position: "absolute",
+    left: 34,
+    top: 0,
+    width: 61,
+    height: 46,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.14)",
+  },
+
+  shipCloudRain: {
+    position: "absolute",
+    left: 8,
+    top: 48,
+    width: 100,
+    height: 40,
+  },
+
+  shipCloudRainDrop: {
+    position: "absolute",
+    top: 0,
+    width: 2,
+    height: 18,
+    borderRadius: 2,
+    backgroundColor: "rgba(220,235,255,0.24)",
+    transform: [{ rotate: "10deg" }],
+  },
+
+  shipPlaneTrail: {
+    position: "absolute",
+    zIndex: 7,
+  },
+
+  shipPlanePosition: {
+    position: "absolute",
+    zIndex: 12,
+    width: 60,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  shipMissileTrailStreak: {
+    position: "absolute",
+    height: 4,
+    borderRadius: 999,
+    zIndex: 8,
+  },
+
+  shipMissile: {
+    position: "absolute",
+    width: 0,
+    height: 0,
+    borderTopWidth: 9,
+    borderBottomWidth: 9,
+    borderLeftWidth: 22,
+    borderTopColor: "transparent",
+    borderBottomColor: "transparent",
+    zIndex: 10,
+  },
+
+  shipMissileElite: {
+    borderTopWidth: 11,
+    borderBottomWidth: 11,
+    borderLeftWidth: 27,
+  },
+
+  shipInterceptor: {
+    position: "absolute",
+    width: 0,
+    height: 0,
+    borderTopWidth: 4,
+    borderBottomWidth: 4,
+    borderLeftWidth: 10,
+    borderTopColor: "transparent",
+    borderBottomColor: "transparent",
+    zIndex: 11,
+  },
+
+  shipHunterProjectile: {
+    position: "absolute",
+    width: 10,
+    height: 8,
+    borderRadius: 5,
+    zIndex: 11,
+  },
+
+  shipFlare: {
+    position: "absolute",
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    shadowOpacity: 0.8,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 0 },
+    zIndex: 9,
+  },
+
+  shipExplosion: {
+    position: "absolute",
+    width: 30,
+    height: 30,
+    borderRadius: 999,
+    borderWidth: 2,
+    zIndex: 13,
+  },
+
+  shipJoystickBase: {
+    position: "absolute",
+    left: 18,
+    bottom: 18,
+    width: 110,
+    height: 110,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 20,
+  },
+
+  shipJoystickKnob: {
+    width: 42,
+    height: 42,
+    borderRadius: 999,
+  },
+
+  shipAbilityButton: {
+    position: "absolute",
+    right: 18,
+    minWidth: 82,
+    height: 56,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 1,
+    zIndex: 20,
+  },
+
+  shipAbilityPrimary: {
+    bottom: 26,
+  },
+
+  shipAbilitySecondary: {
+    bottom: 92,
+  },
+
+  shipCrashOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+
+  shipCrashTitle: {
+    fontSize: 30,
+    fontWeight: "900",
+  },
+
+  shipCrashScore: {
+    fontSize: 14,
+    fontWeight: "800",
+    marginTop: 5,
+  },
+
+  shipCrashButtons: {
+    flexDirection: "row",
+    gap: 9,
+    marginTop: 18,
+  },
+
+  shipCrashButton: {
+    minWidth: 104,
+    minHeight: 44,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
   },
 
   coinPanel: {

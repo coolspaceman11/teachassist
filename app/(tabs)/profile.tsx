@@ -1,3 +1,4 @@
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import Text from "@/components/ui/AppText";
 import AppTextInput from "@/components/ui/AppTextInput";
 import LiquidGlassButton from "@/components/ui/LiquidGlassButton";
@@ -171,11 +172,11 @@ const PROFILE_GREETING_ENABLED_STORAGE_KEY = "profile_greeting_enabled";
 
 const CHANGELOG = [
   {
-    version: "0.3.0",
-    date: "August 31, 2026",
-    title: "The Fun Update",
+    version: "0.4.0",
+    date: "September 1, 2026",
+    title: "The (polished) Fun Update, Pt. 2",
     changes: [
-      "Added Midnight Mode, live Maple weather, a schedule calendar, Maxwell pet, Coin Flip, rainy study ambience, and Cozy Wave with Wave and Ship modes",
+      "Overhauled the Wave and Ship gamemodes, added an entirely new minigame, fixed weather network bugs and smoothened the overall experience",
     ],
   },
   {
@@ -312,6 +313,7 @@ const ProfileScreen = () => {
   const [actionTitle, setActionTitle] = useState("");
   const [actionUrl, setActionUrl] = useState("");
   const [showProfileImagesModal, setShowProfileImagesModal] = useState(false);
+  const [profileSearch, setProfileSearch] = useState("");
 
   const now = new Date();
   const year = now.getFullYear();
@@ -624,6 +626,49 @@ const ProfileScreen = () => {
       : normalizeQuickActions(
           reconcileSchoolQuickActions(DEFAULT_QUICK_ACTIONS, school),
         ).filter((action) => !action.isHidden);
+  const profileSearchQuery = profileSearch.trim().toLocaleLowerCase();
+
+  const profileSettingsSearchItems = [
+    {
+      id: "personalization",
+      title: "Personalization",
+      subtitle: "Themes, backgrounds, greeting, and pet",
+      route: "/Personalization",
+    },
+    {
+      id: "privacy-notifications",
+      title: "Privacy & Notifications",
+      subtitle: "Privacy and notification preferences",
+      route: "/(settings)/PrivacyNotifications",
+    },
+    {
+      id: "support-legal",
+      title: "Support & Legal",
+      subtitle: "Support, legal, and app information",
+      route: "/(settings)/SupportLegal",
+    },
+    {
+      id: "advanced",
+      title: "Advanced",
+      subtitle: "Experiments and advanced options",
+      route: "/AdvancedView",
+    },
+  ];
+
+  const matchedQuickActions = profileSearchQuery
+    ? visibleQuickActions.filter((action) =>
+        action.title.toLocaleLowerCase().includes(profileSearchQuery),
+      )
+    : [];
+
+  const matchedSettings = profileSearchQuery
+    ? profileSettingsSearchItems.filter((item) =>
+        `${item.title} ${item.subtitle}`
+          .toLocaleLowerCase()
+          .includes(profileSearchQuery),
+      )
+    : [];
+
   const hasCustomProfileImage = Boolean(image);
   const hasCustomBackgroundImage = Boolean(backgroundImage);
   const compactActionButtonStyle = {
@@ -942,15 +987,18 @@ const ProfileScreen = () => {
   );
   const profileHeader = (
     <View
-      className={`flex-row items-center justify-between px-5 mb-4`}
+      className="px-5 mb-4"
       style={{ marginTop: headerTopMargin }}
     >
-      <Text
-        className={`text-5xl font-semibold leading-[55px] ${isDark ? "text-appwhite" : "text-appblack"}`}
-      >
-        My Profile
-      </Text>
-      <View className="">
+      <View className="flex-row items-center justify-between">
+        <Text
+          className={`text-5xl font-semibold leading-[55px] ${
+            isDark ? "text-appwhite" : "text-appblack"
+          }`}
+        >
+          My Profile
+        </Text>
+
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel="Open settings"
@@ -976,6 +1024,174 @@ const ProfileScreen = () => {
           />
         </TouchableOpacity>
       </View>
+
+      <View
+        style={{
+          minHeight: 44,
+          marginTop: 8,
+          borderRadius: 14,
+          borderWidth: 1,
+          borderColor: activeTone.border,
+          backgroundColor: activeTone.bg3,
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: 12,
+        }}
+      >
+        <MaterialIcons
+          name="search"
+          size={20}
+          color={activeTone.muted}
+          style={{ marginRight: 8 }}
+        />
+
+        <AppTextInput
+          value={profileSearch}
+          onChangeText={setProfileSearch}
+          placeholder="Search profile"
+          placeholderTextColor={activeTone.muted}
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={{
+            flex: 1,
+            minHeight: 42,
+            color: activeTone.fg,
+            backgroundColor: "transparent",
+            borderWidth: 0,
+            paddingHorizontal: 0,
+          }}
+        />
+
+        {profileSearch.length > 0 ? (
+          <TouchableOpacity
+            onPress={() => setProfileSearch("")}
+            hitSlop={8}
+          >
+            <MaterialIcons
+              name="close"
+              size={19}
+              color={activeTone.muted}
+            />
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
+      {profileSearchQuery ? (
+        <LiquidGlassView
+          className="rounded-2xl overflow-hidden mt-2"
+          fallbackBackgroundColor={activeTone.bg3}
+          glassTintColor={activeTone.bg2}
+          glassEffectStyle="clear"
+        >
+          <View style={{ paddingVertical: 6 }}>
+            {matchedQuickActions.length === 0 &&
+            matchedSettings.length === 0 ? (
+              <Text
+                style={{
+                  color: activeTone.muted,
+                  fontSize: 12,
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                }}
+              >
+                No profile results
+              </Text>
+            ) : null}
+
+            {matchedQuickActions.slice(0, 4).map((action) => (
+              <TouchableOpacity
+                key={`search-action-${action.id}`}
+                onPress={async () => {
+                  setProfileSearch("");
+                  hapticsImpact(Haptics.ImpactFeedbackStyle.Light);
+
+                  if (action.kind === "internal") {
+                    router.push(action.url as any);
+                    return;
+                  }
+
+                  const resolvedUrl = await resolveQuickActionUrl(action.url);
+                  if (!resolvedUrl) return;
+
+                  Linking.openURL(
+                    resolvedUrl.startsWith("http")
+                      ? resolvedUrl
+                      : `https://${resolvedUrl}`,
+                  );
+                }}
+                style={{
+                  minHeight: 48,
+                  paddingHorizontal: 14,
+                  paddingVertical: 9,
+                  flexDirection: "row",
+                  alignItems: "center",
+                }}
+              >
+                <MaterialIcons
+                  name="bolt"
+                  size={18}
+                  color={activeTone.accent}
+                />
+                <Text
+                  style={{
+                    color: activeTone.fg,
+                    fontSize: 13,
+                    fontWeight: "700",
+                    marginLeft: 10,
+                    flex: 1,
+                  }}
+                >
+                  {action.title}
+                </Text>
+              </TouchableOpacity>
+            ))}
+
+            {matchedSettings.slice(0, 4).map((item) => (
+              <TouchableOpacity
+                key={`search-setting-${item.id}`}
+                onPress={() => {
+                  setProfileSearch("");
+                  hapticsImpact(Haptics.ImpactFeedbackStyle.Light);
+                  router.push(item.route as any);
+                }}
+                style={{
+                  minHeight: 52,
+                  paddingHorizontal: 14,
+                  paddingVertical: 8,
+                  flexDirection: "row",
+                  alignItems: "center",
+                }}
+              >
+                <MaterialIcons
+                  name="settings"
+                  size={18}
+                  color={activeTone.accent}
+                />
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text
+                    style={{
+                      color: activeTone.fg,
+                      fontSize: 13,
+                      fontWeight: "700",
+                    }}
+                  >
+                    {item.title}
+                  </Text>
+                  <Text
+                    style={{
+                      color: activeTone.muted,
+                      fontSize: 10,
+                      marginTop: 2,
+                    }}
+                  >
+                    {item.subtitle}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </LiquidGlassView>
+      ) : null}
     </View>
   );
 

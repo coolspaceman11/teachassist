@@ -13,11 +13,20 @@ import Text from "@/components/ui/AppText";
 
 const MAPLE_LAT = 43.85493;
 const MAPLE_LONG = -79.51248;
-const WEATHER_URL =
+const WEATHER_FIELDS =
+  "temperature_2m,weather_code,is_day,cloud_cover,precipitation,snowfall";
+
+const BEST_MATCH_WEATHER_URL =
   `https://api.open-meteo.com/v1/forecast?latitude=${MAPLE_LAT}` +
   `&longitude=${MAPLE_LONG}` +
-  "&current=temperature_2m,weather_code,is_day,cloud_cover,precipitation,snowfall" +
-  "&temperature_unit=celsius&timezone=America%2FToronto";
+  `&current=${WEATHER_FIELDS}` +
+  "&temperature_unit=celsius&timezone=America%2FToronto&forecast_hours=1";
+
+const CANADIAN_GEM_WEATHER_URL =
+  `https://api.open-meteo.com/v1/gem?latitude=${MAPLE_LAT}` +
+  `&longitude=${MAPLE_LONG}` +
+  `&current=${WEATHER_FIELDS}` +
+  "&temperature_unit=celsius&timezone=America%2FToronto&forecast_hours=1";
 
 type WeatherState = {
   temperature: number;
@@ -28,11 +37,12 @@ type WeatherState = {
   snowfall: number;
 };
 
-type WeatherKind = "clear" | "cloudy" | "rain" | "snow" | "storm" | "fog";
+type WeatherKind = "clear" | "partlyCloudy" | "cloudy" | "rain" | "snow" | "storm" | "fog";
 
 const classifyWeather = (code: number): WeatherKind => {
   if (code === 0) return "clear";
-  if ([1, 2, 3].includes(code)) return "cloudy";
+  if ([1, 2].includes(code)) return "partlyCloudy";
+  if (code === 3) return "cloudy";
   if ([45, 48].includes(code)) return "fog";
   if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return "rain";
   if ((code >= 71 && code <= 77) || (code >= 85 && code <= 86)) return "snow";
@@ -44,6 +54,8 @@ const description = (kind: WeatherKind, isDay: boolean) => {
   switch (kind) {
     case "clear":
       return isDay ? "Clear skies" : "Clear night";
+    case "partlyCloudy":
+      return "Partly cloudy";
     case "cloudy":
       return "Cloudy";
     case "rain":
@@ -59,6 +71,7 @@ const description = (kind: WeatherKind, isDay: boolean) => {
 
 const gradients: Record<WeatherKind | "night", [string, string]> = {
   clear: ["#378bd0", "#75c7f2"],
+  partlyCloudy: ["#487ea6", "#8db4cd"],
   cloudy: ["#536675", "#8798a5"],
   rain: ["#31465a", "#526b7e"],
   snow: ["#829dad", "#c7d9e2"],
@@ -130,6 +143,33 @@ const WeatherVisual = ({ kind, isDay }: { kind: WeatherKind; isDay: boolean }) =
     );
   }
 
+  if (kind === "partlyCloudy") {
+    return (
+      <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
+        <MaterialIcons
+          name={isDay ? "wb-sunny" : "nightlight-round"}
+          size={42}
+          color={isDay ? "rgba(255,239,162,0.9)" : "rgba(245,242,216,0.9)"}
+          style={{ position: "absolute", right: 35, bottom: 15 }}
+        />
+        <Animated.View
+          style={{
+            position: "absolute",
+            left: 0,
+            bottom: 0,
+            transform: [{ translateX: cloudX }],
+          }}
+        >
+          <MaterialIcons
+            name="cloud"
+            size={54}
+            color="rgba(255,255,255,0.28)"
+          />
+        </Animated.View>
+      </View>
+    );
+  }
+
   if (kind === "cloudy" || kind === "fog" || kind === "rain" || kind === "storm") {
     return (
       <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
@@ -172,22 +212,88 @@ export default function ProfileWeatherBar() {
   const [unavailable, setUnavailable] = useState(false);
 
   const loadWeather = useCallback(async () => {
-    try {
-      const response = await fetch(WEATHER_URL);
-      if (!response.ok) throw new Error(`Weather ${response.status}`);
+    const cacheBust = Math.floor(Date.now() / (5 * 60 * 1000));
+
+    const readCurrent = async (baseUrl: string) => {
+      const response = await fetch(`${baseUrl}&refresh=${cacheBust}`, {
+        headers: {
+          "Cache-Control": "no-cache",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Weather ${response.status}`);
+      }
+
       const data = await response.json();
       const current = data?.current;
+
       if (!current || typeof current.temperature_2m !== "number") {
         throw new Error("Missing current weather");
       }
-      setWeather({
-        temperature: current.temperature_2m,
+
+      return {
+        temperature: Number(current.temperature_2m),
         code: Number(current.weather_code ?? 0),
         isDay: Number(current.is_day ?? 1) === 1,
         cloudCover: Number(current.cloud_cover ?? 0),
         precipitation: Number(current.precipitation ?? 0),
         snowfall: Number(current.snowfall ?? 0),
-      });
+      } satisfies WeatherState;
+    };
+
+    try {
+      const [bestMatchResult, gemResult] = await Promise.allSettled([
+        readCurrent(BEST_MATCH_WEATHER_URL),
+        readCurrent(CANADIAN_GEM_WEATHER_URL),
+      ]);
+
+      const bestMatch =
+        bestMatchResult.status === "fulfilled"
+          ? bestMatchResult.value
+          : null;
+
+      const gem =
+        gemResult.status === "fulfilled"
+          ? gemResult.value
+          : null;
+
+      if (!bestMatch && !gem) {
+        throw new Error("All weather sources failed");
+      }
+
+      if (bestMatch && gem) {
+        const temperatureGap = Math.abs(
+          bestMatch.temperature - gem.temperature,
+        );
+
+        // Best Match updates more frequently, while GEM adds a local Canadian
+        // high-resolution signal. Blend only when the two are reasonably close.
+        const blendedTemperature =
+          temperatureGap <= 4
+            ? bestMatch.temperature * 0.7 + gem.temperature * 0.3
+            : bestMatch.temperature;
+
+        const conditionSource =
+          bestMatch.precipitation > 0 ||
+          bestMatch.snowfall > 0 ||
+          bestMatch.code >= 45
+            ? bestMatch
+            : gem.code >= 45
+              ? gem
+              : bestMatch;
+
+        setWeather({
+          ...conditionSource,
+          temperature: blendedTemperature,
+          cloudCover: Math.round(
+            bestMatch.cloudCover * 0.7 + gem.cloudCover * 0.3,
+          ),
+        });
+      } else {
+        setWeather((bestMatch ?? gem)!);
+      }
+
       setUnavailable(false);
     } catch (error) {
       console.warn("[Weather] Maple weather unavailable", error);
@@ -197,7 +303,7 @@ export default function ProfileWeatherBar() {
 
   useEffect(() => {
     loadWeather();
-    const timer = setInterval(loadWeather, 15 * 60 * 1000);
+    const timer = setInterval(loadWeather, 5 * 60 * 1000);
     return () => clearInterval(timer);
   }, [loadWeather]);
 
@@ -230,7 +336,7 @@ export default function ProfileWeatherBar() {
         <WeatherVisual kind={kind} isDay={weather.isDay} />
         <View style={{ flex: 1, zIndex: 2 }}>
           <Text style={styles.location}>Maple, Vaughan</Text>
-          <Text style={styles.condition}>{description(kind, weather.isDay)} • Open-Meteo</Text>
+          <Text style={styles.condition}>{description(kind, weather.isDay)}</Text>
         </View>
         <Text style={styles.temperature}>{Math.round(weather.temperature)}°</Text>
       </LinearGradient>
