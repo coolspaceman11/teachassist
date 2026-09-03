@@ -15,6 +15,18 @@ module.exports = ({ config }) => {
       bundleIdentifier: IS_DEV
         ? "com.teachassistplus.studentapp.dev"
         : config.ios?.bundleIdentifier,
+      infoPlist: {
+        ...(config.ios?.infoPlist ?? {}),
+        NSLocationWhenInUseUsageDescription:
+          "TeachAssist+ uses your location only to calculate your driving ETA to Maple High School.",
+        NSHealthShareUsageDescription:
+          "TeachAssist+ reads your step and activity totals so you can view a private activity summary in Misc.",
+      },
+      entitlements: {
+        ...(config.ios?.entitlements ?? {}),
+        "com.apple.developer.weatherkit": true,
+        "com.apple.developer.healthkit": true,
+      },
     },
 
     android: {
@@ -26,14 +38,12 @@ module.exports = ({ config }) => {
 
     plugins: [
       ...basePlugins,
-
       [
         "expo-dev-client",
         {
           addGeneratedScheme: IS_DEV,
         },
       ],
-
       [
         "react-native-ble-plx",
         {

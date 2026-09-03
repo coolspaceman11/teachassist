@@ -6,10 +6,7 @@ import {
   Alert,
   Animated,
   Easing,
-  Image,
   Linking,
-  Modal,
-  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,7 +15,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Circle, Path, Polygon, Rect } from "react-native-svg";
+import Svg, { Polygon } from "react-native-svg";
 
 import Text from "@/components/ui/AppText";
 import LiquidGlassView from "@/components/ui/LiquidGlassView";
@@ -27,17 +24,11 @@ import GDShipGame from "@/components/GDShipGame";
 import KingshotDemo from "@/components/KingshotDemo";
 import { useTheme } from "@/contexts/ThemeContext";
 import { hapticsImpact } from "@/utils/haptics";
+import { getHealthSummary, isTeachAssistNativeAvailable, requestHealthAccess, type HealthSummary } from "@/modules/teachassist-native";
 import { setGPTAccessEnabled, useFunSettings } from "@/utils/funSettings";
-import {
-  consumePendingShipTaskBonus,
-  SHIP_CREDITS_KEY,
-  SHIP_EQUIPPED_KEY,
-  SHIP_HIGH_SCORE_KEY,
-  SHIP_OWNED_KEY,
-} from "@/utils/shipEconomy";
 import { SecureStorage } from "../(auth)/taauth";
 
-type MiscTool = "sunshine" | "flipper" | "coin" | "wave" | "kingshot" | "gpt" | null;
+type MiscTool = "sunshine" | "flipper" | "coin" | "health" | "wave" | "kingshot" | "gpt" | null;
 
 type SunshineRow = {
   id: string;
@@ -303,6 +294,23 @@ export default function MiscScreen() {
           </LiquidGlassView>
         </Pressable>
 
+        <Pressable style={styles.cell} onPress={() => openTool("health")}>
+          <LiquidGlassView
+            className="rounded-2xl overflow-hidden"
+            fallbackBackgroundColor={activeTone.bg3}
+            glassTintColor={activeTone.bg2}
+            glassEffectStyle="clear"
+          >
+            <View style={styles.card}>
+              <View style={[styles.iconWrap, { backgroundColor: activeTone.bg4 }]}>
+                <MaterialIcons name="directions-walk" size={28} color={activeTone.accent} />
+              </View>
+              <Text style={[styles.cardTitle, { color: textColor }]}>Health & Steps</Text>
+              <Text style={[styles.cardSubtitle, { color: activeTone.muted }]}>Daily and weekly activity from Apple Health</Text>
+            </View>
+          </LiquidGlassView>
+        </Pressable>
+
         {waveMockupEnabled ? (
           <Pressable style={styles.cell} onPress={() => openTool("wave")}>
             <LiquidGlassView
@@ -320,10 +328,10 @@ export default function MiscScreen() {
                   />
                 </View>
                 <Text style={[styles.cardTitle, { color: textColor }]}>
-                  GD Wave Mockup
+                  Minigames
                 </Text>
                 <Text style={[styles.cardSubtitle, { color: activeTone.muted }]}>
-                  A gamemode inspired by GD's wave and more
+                  Two gamemodes solely for fun
                 </Text>
               </View>
             </LiquidGlassView>
@@ -491,8 +499,10 @@ export default function MiscScreen() {
                   ? "Flipper Zero"
                   : activeTool === "coin"
                     ? "Coin Flip"
-                    : activeTool === "wave"
-                      ? "GD Wave Mockup"
+                    : activeTool === "health"
+                      ? "Health & Steps"
+                      : activeTool === "wave"
+                      ? "Minigames"
                       : activeTool === "kingshot"
                         ? "Kingshot Demo"
                         : "GPT Access"
@@ -503,6 +513,7 @@ export default function MiscScreen() {
           {activeTool === "sunshine" && <SunshineListPanel />}
           {activeTool === "flipper" && <FlipperPanel />}
           {activeTool === "coin" && <CoinFlipPanel />}
+          {activeTool === "health" && <HealthTrackerPanel />}
           {activeTool === "wave" && <GDWaveMockupPanel maxwellUnlocked={maxwellPlaneUnlocked} />}
           {activeTool === "kingshot" && <KingshotDemo />}
           {activeTool === "gpt" && <GPTAccessPanel />}
@@ -1212,6 +1223,103 @@ function FlipperPanel() {
   );
 }
 
+function HealthTrackerPanel() {
+  const { activeTone, isDark } = useTheme();
+  const textColor = isDark ? "#edebea" : "#2f3035";
+  const [summary, setSummary] = useState<HealthSummary | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async () => {
+    if (!isTeachAssistNativeAvailable()) {
+      setError("Apple Health support needs the new native TeachAssist+ build.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const authorized = await requestHealthAccess();
+      if (!authorized) {
+        setError("Health access was not granted.");
+        return;
+      }
+      const next = await getHealthSummary();
+      setSummary(next);
+    } catch (err) {
+      console.warn("[Health] Could not load summary", err);
+      setError("Apple Health data could not be loaded. Check Health permissions for TeachAssist+.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load().catch(() => {});
+  }, []);
+
+  const cells = summary
+    ? [
+        ["Today", `${Math.round(summary.stepsToday).toLocaleString()} steps`],
+        ["Last 7 days", `${Math.round(summary.stepsWeek).toLocaleString()} steps`],
+        ["Daily average", `${Math.round(summary.averageSteps).toLocaleString()} steps`],
+        ["Distance", `${summary.distanceKmToday.toFixed(2)} km`],
+        ["Active energy", `${Math.round(summary.activeEnergyKcalToday)} kcal`],
+        ["Flights climbed", `${Math.round(summary.flightsClimbedToday)}`],
+      ]
+    : [];
+
+  return (
+    <View style={styles.panelBody}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.panelContent}>
+        <LiquidGlassView
+          className="rounded-2xl overflow-hidden"
+          fallbackBackgroundColor={activeTone.bg3}
+          glassTintColor={activeTone.bg2}
+          glassEffectStyle="clear"
+        >
+          <View style={styles.healthHero}>
+            <View style={[styles.healthIcon, { backgroundColor: activeTone.bg4 }]}>
+              <MaterialIcons name="favorite" size={31} color={activeTone.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.sectionTitle, { color: textColor }]}>Apple Health</Text>
+              <Text style={[styles.helper, { color: activeTone.muted }]}>Read-only activity summary. TeachAssist+ does not write health data.</Text>
+            </View>
+          </View>
+        </LiquidGlassView>
+
+        {summary ? (
+          <View style={styles.healthGrid}>
+            {cells.map(([label, value]) => (
+              <View key={label} style={[styles.healthMetric, { backgroundColor: activeTone.bg3, borderColor: activeTone.border }]}>
+                <Text style={[styles.healthMetricLabel, { color: activeTone.muted }]}>{label}</Text>
+                <Text style={[styles.healthMetricValue, { color: textColor }]}>{value}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        {error ? (
+          <View style={[styles.healthError, { backgroundColor: activeTone.bg3, borderColor: activeTone.border }]}>
+            <MaterialIcons name="info-outline" size={21} color={activeTone.accent} />
+            <Text style={{ color: activeTone.muted, flex: 1, fontSize: 12, lineHeight: 17 }}>{error}</Text>
+          </View>
+        ) : null}
+
+        <Pressable
+          onPress={load}
+          disabled={loading}
+          style={[styles.fullButton, { backgroundColor: activeTone.accent, opacity: loading ? 0.55 : 1 }]}
+        >
+          <MaterialIcons name={loading ? "hourglass-top" : "refresh"} size={20} color={isDark ? "#111113" : "#ffffff"} />
+          <Text style={{ color: isDark ? "#111113" : "#ffffff", fontWeight: "900" }}>{loading ? "Loading Health…" : summary ? "Refresh" : "Connect Apple Health"}</Text>
+        </Pressable>
+      </ScrollView>
+    </View>
+  );
+}
+
 function CoinFlipPanel() {
   const { activeTone, isDark } = useTheme();
   const textColor = isDark ? "#edebea" : "#2f3035";
@@ -1288,324 +1396,7 @@ type WaveSpike = {
 };
 
 type GameMode = "wave" | "ship";
-type ShipMenuScreen = "menu" | "store" | "game";
-type ShipSkinId =
-  | "default"
-  | "turboprop"
-  | "jet"
-  | "airliner"
-  | "bomber"
-  | "interceptor"
-  | "maxwell";
-
-type ShipAbility =
-  | "none"
-  | "rearGun"
-  | "flares"
-  | "hunter"
-  | "gunFlares";
-
-type ShipSkinDefinition = {
-  id: ShipSkinId;
-  name: string;
-  price: number;
-  speed: number;
-  acceleration: number;
-  ability: ShipAbility;
-  description: string;
-};
-
-type ShipMissile = {
-  id: number;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  age: number;
-  rotation: number;
-  elite: boolean;
-};
-
-type ShipProjectile = {
-  id: number;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  age: number;
-  kind: "bullet" | "hunter";
-  targetId?: number;
-};
-
-type ShipFlare = {
-  id: number;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  expiresAt: number;
-};
-
-type ShipExplosion = {
-  id: number;
-  x: number;
-  y: number;
-  bornAt: number;
-};
-
-type ShipTrailPoint = {
-  x: number;
-  y: number;
-};
-
-type ShipScene = {
-  plane: { x: number; y: number };
-  heading: number;
-  camera: { x: number; y: number };
-  missiles: ShipMissile[];
-  projectiles: ShipProjectile[];
-  flares: ShipFlare[];
-  explosions: ShipExplosion[];
-  trail: ShipTrailPoint[];
-  elapsed: number;
-  earnedPreview: number;
-  flareCooldown: number;
-  gunCooldown: number;
-};
-
 const GD_WAVE_HIGH_SCORE_KEY = "ta_plus_gd_wave_high_score";
-
-const SHIP_SKINS: ShipSkinDefinition[] = [
-  {
-    id: "default",
-    name: "Default",
-    price: 0,
-    speed: 142,
-    acceleration: 6.2,
-    ability: "none",
-    description: "Balanced starter aircraft.",
-  },
-  {
-    id: "turboprop",
-    name: "Turboprop",
-    price: 100,
-    speed: 178,
-    acceleration: 6.5,
-    ability: "none",
-    description: "Fast propeller aircraft with stronger cruising speed.",
-  },
-  {
-    id: "jet",
-    name: "Jet",
-    price: 1000,
-    speed: 222,
-    acceleration: 7.2,
-    ability: "rearGun",
-    description: "High speed with a rear-firing defensive cannon.",
-  },
-  {
-    id: "bomber",
-    name: "Bomber",
-    price: 2000,
-    speed: 174,
-    acceleration: 5.9,
-    ability: "hunter",
-    description: "Launches counter-missiles that hunt incoming missiles.",
-  },
-  {
-    id: "airliner",
-    name: "Airliner",
-    price: 3500,
-    speed: 166,
-    acceleration: 5.8,
-    ability: "flares",
-    description: "Large aircraft with missile-decoy flares.",
-  },
-  {
-    id: "interceptor",
-    name: "Interceptor",
-    price: 5000,
-    speed: 246,
-    acceleration: 7.8,
-    ability: "gunFlares",
-    description: "Fast defensive aircraft with rear guns and flares.",
-  },
-  {
-    id: "maxwell",
-    name: "Maxwell",
-    price: 0,
-    speed: 198,
-    acceleration: 6.9,
-    ability: "none",
-    description: "A hidden upgraded turboprop.",
-  },
-];
-
-const distance = (
-  ax: number,
-  ay: number,
-  bx: number,
-  by: number,
-) => Math.hypot(ax - bx, ay - by);
-
-const normalizeVector = (
-  x: number,
-  y: number,
-) => {
-  const length = Math.hypot(x, y);
-
-  if (length < 0.0001) {
-    return { x: 1, y: 0 };
-  }
-
-  return {
-    x: x / length,
-    y: y / length,
-  };
-};
-
-const SHIP_SPRITES: Record<
-  Exclude<ShipSkinId, "maxwell">,
-  any
-> = {
-  default: require("../../assets/planes/default.png"),
-  turboprop: require("../../assets/planes/turboprop.png"),
-  jet: require("../../assets/planes/jet.png"),
-  bomber: require("../../assets/planes/bomber.png"),
-  airliner: require("../../assets/planes/airliner.png"),
-  interceptor: require("../../assets/planes/interceptor.png"),
-};
-
-function SpinningPropeller({
-  accent,
-  size,
-}: {
-  accent: string;
-  size: number;
-}) {
-  const spin = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.timing(spin, {
-        toValue: 1,
-        duration: 420,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    );
-
-    animation.start();
-
-    return () => {
-      animation.stop();
-    };
-  }, [spin]);
-
-  const rotate = spin.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "360deg"],
-  });
-
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={{
-        position: "absolute",
-        left: size * 0.5 - 1.5,
-        top: size * 0.015,
-        width: 3,
-        height: size * 0.23,
-        borderRadius: 2,
-        backgroundColor: accent,
-        opacity: 0.9,
-        transform: [{ rotate }],
-      }}
-    />
-  );
-}
-
-function PlaneGraphic({
-  skin,
-  accent,
-  size = 58,
-}: {
-  skin: ShipSkinId;
-  accent: string;
-  size?: number;
-  spinPhase?: number;
-}) {
-  if (skin === "maxwell") {
-    return (
-      <View
-        style={{
-          width: size,
-          height: size,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <View
-          style={{
-            position: "absolute",
-            left: size * 0.04,
-            top: size * 0.31,
-            width: size * 0.87,
-            height: size * 0.32,
-            borderRadius: size,
-            backgroundColor: `${accent}24`,
-            borderWidth: 1,
-            borderColor: accent,
-          }}
-        />
-
-        <Image
-          source={require("../../assets/images/maxwell.png")}
-          resizeMode="contain"
-          style={{
-            width: size * 0.72,
-            height: size * 0.72,
-            tintColor: accent,
-          }}
-        />
-
-        <SpinningPropeller
-          accent={accent}
-          size={size}
-        />
-      </View>
-    );
-  }
-
-  return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <Image
-        source={SHIP_SPRITES[skin]}
-        resizeMode="contain"
-        fadeDuration={0}
-        style={{
-          width: size,
-          height: size,
-          tintColor: accent,
-        }}
-      />
-
-      {skin === "turboprop" ? (
-        <SpinningPropeller
-          accent={accent}
-          size={size}
-        />
-      ) : null}
-    </View>
-  );
-}
 
 function GDWaveMockupPanel({
   maxwellUnlocked,
@@ -2236,7 +2027,7 @@ function GDWaveMode() {
             >
               {elapsed > 0
                 ? "Try again"
-                : "GD Wave Mockup"}
+                : "Wave mode"}
             </Text>
             <Text
               style={[
@@ -3320,414 +3111,54 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
 
-  shipMenuContent: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 70,
-  },
-
-  shipTaskBonusPopup: {
-    minHeight: 42,
-    borderRadius: 14,
-    marginBottom: 10,
-    paddingHorizontal: 13,
+  healthHero: {
+    minHeight: 96,
+    padding: 16,
     flexDirection: "row",
+    alignItems: "center",
+    gap: 13,
+  },
+  healthIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    gap: 7,
   },
-
-  shipMenuTopRow: {
-    minHeight: 44,
+  healthGrid: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 14,
-  },
-
-  shipSmallButton: {
-    minHeight: 38,
-    borderRadius: 12,
-    borderWidth: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 11,
-  },
-
-  shipCreditsPill: {
-    minHeight: 38,
-    borderRadius: 12,
-    borderWidth: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 11,
-  },
-
-  shipBestText: {
-    fontSize: 12,
-    fontWeight: "800",
-  },
-
-  shipHero: {
-    paddingHorizontal: 18,
-    paddingVertical: 20,
-    alignItems: "center",
-  },
-
-  shipMenuEyebrow: {
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-  },
-
-  shipHeroGraphic: {
-    width: 154,
-    height: 105,
-    borderRadius: 26,
-    alignItems: "center",
-    justifyContent: "center",
+    flexWrap: "wrap",
+    gap: 10,
     marginTop: 14,
-    marginBottom: 13,
   },
-
-  shipMenuTitle: {
-    fontSize: 25,
-    fontWeight: "900",
-    textAlign: "center",
-  },
-
-  shipMenuSubtitle: {
-    fontSize: 11,
-    lineHeight: 17,
-    textAlign: "center",
-    marginTop: 6,
-    paddingHorizontal: 8,
-  },
-
-  shipLastRun: {
-    minWidth: 150,
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginTop: 14,
-    alignItems: "center",
-  },
-
-  shipMainButton: {
-    minHeight: 52,
-    borderRadius: 15,
-    marginTop: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-  },
-
-  shipSecondaryButton: {
-    minHeight: 48,
+  healthMetric: {
+    width: "48%",
+    minHeight: 78,
     borderRadius: 15,
     borderWidth: 1,
-    marginTop: 9,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-  },
-
-  shipFullscreenRow: {
-    minHeight: 64,
-    borderRadius: 15,
-    borderWidth: 1,
-    marginTop: 9,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-
-  shipStoreRow: {
-    minHeight: 118,
-    flexDirection: "row",
-    alignItems: "center",
     paddingHorizontal: 13,
     paddingVertical: 12,
-  },
-
-  shipStoreGraphic: {
-    width: 82,
-    height: 74,
-    borderRadius: 17,
-    alignItems: "center",
     justifyContent: "center",
   },
-
-  shipStoreName: {
-    fontSize: 15,
-    fontWeight: "900",
-  },
-
-  shipStoreDescription: {
+  healthMetricLabel: {
     fontSize: 10,
-    lineHeight: 14,
-    marginTop: 3,
-  },
-
-  shipBuyButton: {
-    minWidth: 70,
-    minHeight: 38,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 8,
-  },
-
-  shipEmbeddedRoot: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 45,
-  },
-
-  shipFullscreenRoot: {
-    flex: 1,
-  },
-
-  shipGameTopBar: {
-    minHeight: 56,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 8,
-  },
-
-  shipGameExit: {
-    width: 40,
-    height: 40,
-    borderRadius: 13,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  shipGameSkinBadge: {
-    width: 50,
-    height: 40,
-    borderRadius: 13,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-
-  shipFlightArena: {
-    alignSelf: "center",
-    borderRadius: 22,
-    borderWidth: 1,
-    overflow: "hidden",
-  },
-
-  shipSkyTint: {
-    ...StyleSheet.absoluteFillObject,
-  },
-
-  shipCloudGraphic: {
-    position: "absolute",
-    width: 128,
-    height: 55,
-  },
-
-  shipCloudBase: {
-    position: "absolute",
-    left: 0,
-    top: 18,
-    width: 102,
-    height: 31,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.14)",
-  },
-
-  shipCloudTop: {
-    position: "absolute",
-    left: 34,
-    top: 0,
-    width: 61,
-    height: 46,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.14)",
-  },
-
-  shipCloudRain: {
-    position: "absolute",
-    left: 8,
-    top: 48,
-    width: 100,
-    height: 40,
-  },
-
-  shipCloudRainDrop: {
-    position: "absolute",
-    top: 0,
-    width: 2,
-    height: 18,
-    borderRadius: 2,
-    backgroundColor: "rgba(220,235,255,0.24)",
-    transform: [{ rotate: "10deg" }],
-  },
-
-  shipPlaneTrail: {
-    position: "absolute",
-    zIndex: 7,
-  },
-
-  shipPlanePosition: {
-    position: "absolute",
-    zIndex: 12,
-    width: 60,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  shipMissileTrailStreak: {
-    position: "absolute",
-    height: 4,
-    borderRadius: 999,
-    zIndex: 8,
-  },
-
-  shipMissile: {
-    position: "absolute",
-    width: 0,
-    height: 0,
-    borderTopWidth: 9,
-    borderBottomWidth: 9,
-    borderLeftWidth: 22,
-    borderTopColor: "transparent",
-    borderBottomColor: "transparent",
-    zIndex: 10,
-  },
-
-  shipMissileElite: {
-    borderTopWidth: 11,
-    borderBottomWidth: 11,
-    borderLeftWidth: 27,
-  },
-
-  shipInterceptor: {
-    position: "absolute",
-    width: 0,
-    height: 0,
-    borderTopWidth: 4,
-    borderBottomWidth: 4,
-    borderLeftWidth: 10,
-    borderTopColor: "transparent",
-    borderBottomColor: "transparent",
-    zIndex: 11,
-  },
-
-  shipHunterProjectile: {
-    position: "absolute",
-    width: 10,
-    height: 8,
-    borderRadius: 5,
-    zIndex: 11,
-  },
-
-  shipFlare: {
-    position: "absolute",
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-    shadowOpacity: 0.8,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 0 },
-    zIndex: 9,
-  },
-
-  shipExplosion: {
-    position: "absolute",
-    width: 30,
-    height: 30,
-    borderRadius: 999,
-    borderWidth: 2,
-    zIndex: 13,
-  },
-
-  shipJoystickBase: {
-    position: "absolute",
-    left: 18,
-    bottom: 18,
-    width: 110,
-    height: 110,
-    borderRadius: 999,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 20,
-  },
-
-  shipJoystickKnob: {
-    width: 42,
-    height: 42,
-    borderRadius: 999,
-  },
-
-  shipAbilityButton: {
-    position: "absolute",
-    right: 18,
-    minWidth: 82,
-    height: 56,
-    borderRadius: 17,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 1,
-    zIndex: 20,
-  },
-
-  shipAbilityPrimary: {
-    bottom: 26,
-  },
-
-  shipAbilitySecondary: {
-    bottom: 92,
-  },
-
-  shipCrashOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 24,
-  },
-
-  shipCrashTitle: {
-    fontSize: 30,
-    fontWeight: "900",
-  },
-
-  shipCrashScore: {
-    fontSize: 14,
     fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  healthMetricValue: {
+    fontSize: 16,
+    fontWeight: "900",
     marginTop: 5,
   },
-
-  shipCrashButtons: {
+  healthError: {
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: 14,
+    paddingHorizontal: 13,
+    paddingVertical: 12,
     flexDirection: "row",
-    gap: 9,
-    marginTop: 18,
-  },
-
-  shipCrashButton: {
-    minWidth: 104,
-    minHeight: 44,
-    borderRadius: 13,
     alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 14,
+    gap: 9,
   },
 
   coinPanel: {
@@ -3748,6 +3179,16 @@ const styles = StyleSheet.create({
   },
   coinResult: { fontSize: 31, fontWeight: "900", marginTop: 24 },
   coinButton: { minHeight: 52, borderRadius: 16, paddingHorizontal: 24, flexDirection: "row", alignItems: "center", gap: 7, marginTop: 18 },
+  gptDisableButton: { position: "absolute", right: 10, top: 10, minHeight: 30, borderRadius: 10, borderWidth: 1, paddingHorizontal: 8, flexDirection: "row", alignItems: "center", gap: 4 },
+  gptDisableText: { fontSize: 9, fontWeight: "800" },
+  groqInstructions: { width: "100%", borderRadius: 14, borderWidth: 1, padding: 13, marginTop: 15 },
+  groqInstructionsTitle: { fontSize: 13, fontWeight: "900", marginBottom: 7 },
+  groqInstructionLine: { fontSize: 11, lineHeight: 17, marginTop: 3 },
+  groqOpenButton: { minHeight: 40, borderRadius: 12, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 11 },
+  groqFinePrint: { fontSize: 9, lineHeight: 14, textAlign: "center", marginTop: 11, paddingHorizontal: 8 },
+  groqConnectedPill: { minHeight: 31, borderRadius: 999, borderWidth: 1, flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, marginTop: 12 },
+  groqConnectedText: { fontSize: 10, fontWeight: "900" },
+  groqThinking: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 12, paddingHorizontal: 8 },
   gptConnectCard: { padding: 20, alignItems: "center" },
   gptConnectTitle: { fontSize: 21, fontWeight: "900", marginTop: 10 },
   gptConnectText: { fontSize: 12, lineHeight: 18, textAlign: "center", marginTop: 6 },

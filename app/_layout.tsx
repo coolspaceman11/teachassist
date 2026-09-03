@@ -7,6 +7,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AppAlertHost } from "@/components/ui/AppAlert";
 import { BiometricLockOverlay } from "@/components/ui/BiometricLockOverlay";
+import PhoneChargeReminder from "@/components/PhoneChargeReminder";
 import { AFoolVisualGradesProvider } from "@/contexts/AFoolVisualGradesContext";
 import { ScheduleProvider } from "@/contexts/ScheduleContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
@@ -66,6 +67,7 @@ function AppShell() {
       </Stack>
 
       <BiometricLockOverlay />
+      <PhoneChargeReminder />
       <AppAlertHost />
     </View>
   );

@@ -20,6 +20,10 @@ export const NORMAL_SHIP_SKINS = [
   "airliner",
   "bomber",
   "interceptor",
+  "scout",
+  "fighter",
+  "stealth",
+  "gunship",
 ] as const;
 
 export async function awardShipTaskCompletionBonus() {

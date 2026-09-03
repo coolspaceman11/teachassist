@@ -24,6 +24,7 @@ import {
   subscribeBiometricLock,
 } from "@/utils/biometricLock";
 import { hapticsImpact } from "@/utils/haptics";
+import { getChargeReminderEnabled, setChargeReminderEnabled } from "@/utils/chargeReminder";
 import {
   clearGuidanceReminders,
   ensureNotificationPermissions,
@@ -54,6 +55,7 @@ const PrivacyNotificationsScreen = () => {
   const [hideMarksInNotifications, setHideMarksInNotifications] =
     useState(false);
   const [notifyWhenMarksHidden, setNotifyWhenMarksHidden] = useState(false);
+  const [chargeReminderEnabled, setChargeReminderEnabledState] = useState(false);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -62,11 +64,13 @@ const PrivacyNotificationsScreen = () => {
         storedTapToReveal,
         storedBiometricLock,
         notificationSettings,
+        storedChargeReminder,
       ] = await Promise.all([
         AsyncStorage.getItem("hide_unavailable_marks"),
         AsyncStorage.getItem("tap_to_reveal_marks"),
         getBiometricLockEnabled(),
         loadNotificationSettings(),
+        getChargeReminderEnabled(),
       ]);
 
       setHideUnavailableMarks(storedHideUnavailable === "true");
@@ -81,6 +85,7 @@ const PrivacyNotificationsScreen = () => {
         notificationSettings.hideMarksInNotifications,
       );
       setNotifyWhenMarksHidden(notificationSettings.notifyWhenMarksHidden);
+      setChargeReminderEnabledState(storedChargeReminder);
     };
 
     loadSettings();
@@ -193,6 +198,22 @@ const PrivacyNotificationsScreen = () => {
     await hapticsImpact(Haptics.ImpactFeedbackStyle.Light);
     await saveNotificationSetting("notifyWhenMarksHidden", value);
     setNotifyWhenMarksHidden(value);
+  };
+
+  const toggleChargeReminder = async (value: boolean) => {
+    await hapticsImpact(Haptics.ImpactFeedbackStyle.Light);
+
+    if (
+      value &&
+      !(await requestNotificationPermission(
+        "Enable notifications so TeachAssist+ can alert you when your iPhone reaches 10% battery.",
+      ))
+    ) {
+      return;
+    }
+
+    await setChargeReminderEnabled(value);
+    setChargeReminderEnabledState(value);
   };
 
   const textClass = isDark ? "text-appwhite" : "text-appblack";
@@ -399,6 +420,24 @@ const PrivacyNotificationsScreen = () => {
               value={notifyWhenMarksHidden}
               disabled={!markNotificationsEnabled}
               onValueChange={toggleHiddenMarkAlerts}
+            />
+          </View>
+
+          <Divider isDark={isDark} />
+
+          <View className="px-4 py-4 flex-row justify-between items-center">
+            <View className="flex-1 pr-3">
+              <Text className={`${textClass} text-base font-semibold`}>
+                Phone Charge Reminder
+              </Text>
+              <Text className={`${textClass}/60 text-sm mt-1`}>
+                Pop up “Charge your phone” and send a notification when your iPhone reaches 10%.
+              </Text>
+            </View>
+
+            <AppToggle
+              value={chargeReminderEnabled}
+              onValueChange={toggleChargeReminder}
             />
           </View>
         </LiquidGlassView>

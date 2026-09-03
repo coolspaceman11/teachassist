@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Animated,
+  Image,
   PanResponder,
   Pressable,
   ScrollView,
@@ -77,12 +78,21 @@ type FriendlySwordsman = {
   respawnAt: number;
 };
 
+type BattleEffect = {
+  id: number;
+  x: number;
+  y: number;
+  bornAt: number;
+  power: number;
+};
+
 type Scene = {
   player: Point;
   enemies: Enemy[];
   towers: Tower[];
   arrows: Arrow[];
   swordsmen: FriendlySwordsman[];
+  effects: BattleEffect[];
   baseHp: number;
   baseMaxHp: number;
   credits: number;
@@ -97,6 +107,11 @@ const KINGSHOT_HEROES_KEY = "ta_plus_kingshot_heroes_v1";
 const KINGSHOT_TROOPS_KEY = "ta_plus_kingshot_troops_v1";
 const KINGSHOT_HERO_EQUIPPED_KEY = "ta_plus_kingshot_hero_equipped_v1";
 const KINGSHOT_LEVEL_UNLOCK_KEY = "ta_plus_kingshot_level_unlock_v1";
+const KINGSHOT_PUBLISH_MS = __DEV__ ? 36 : 28;
+const PLAYER_SPRITES: Record<HeroClass, any> = {
+  archer: require("../assets/kingshot/player-archer.png"),
+  hunter: require("../assets/kingshot/player-hunter.png"),
+};
 
 const HERO_CLASSES = [
   {
@@ -719,6 +734,7 @@ function KingshotBattle({
     towers: [],
     arrows: [],
     swordsmen: [],
+    effects: [],
     baseHp: levelConfig.baseHp,
     baseMaxHp: levelConfig.baseHp,
     credits: 14,
@@ -731,11 +747,14 @@ function KingshotBattle({
   const playerRef = useRef<Point>({ x: mapWidth * 0.5, y: mapHeight * 0.72 });
   const joystickRef = useRef<Point>({ x: 0, y: 0 });
   const joystickKnob = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const playerRender = useRef(new Animated.ValueXY({ x: mapWidth * 0.5 - 21, y: mapHeight * 0.72 - 21 })).current;
+  const playerFacing = useRef(new Animated.Value(1)).current;
 
   const enemiesRef = useRef<Enemy[]>([]);
   const towersRef = useRef<Tower[]>([]);
   const arrowsRef = useRef<Arrow[]>([]);
   const swordsmenRef = useRef<FriendlySwordsman[]>([]);
+  const effectsRef = useRef<BattleEffect[]>([]);
 
   const creditsRef = useRef(14);
   const moneyEarnedRef = useRef(0);
@@ -754,6 +773,7 @@ function KingshotBattle({
   const towerIdRef = useRef(1);
   const arrowIdRef = useRef(1);
   const swordIdRef = useRef(1);
+  const effectIdRef = useRef(1);
 
   const frameRef = useRef<number | null>(null);
   const lastFrameRef = useRef<number | null>(null);
@@ -825,6 +845,24 @@ function KingshotBattle({
     enemy.hp -= damage;
 
     if (enemy.hp <= 0) {
+      if (enemy.kind !== "swordsman") {
+        const power = enemy.kind === "boss" ? 2.8 : 1.65;
+        effectsRef.current.push({ id: effectIdRef.current++, x: enemy.x, y: enemy.y, bornAt: now, power });
+        if (enemy.kind === "boss") {
+          for (let i = 0; i < 8; i += 1) {
+            const angle = (i / 8) * Math.PI * 2;
+            const radius = 18 + (i % 3) * 8;
+            effectsRef.current.push({
+              id: effectIdRef.current++,
+              x: enemy.x + Math.cos(angle) * radius,
+              y: enemy.y + Math.sin(angle) * radius,
+              bornAt: now,
+              power: 1.1 + (i % 2) * 0.35,
+            });
+          }
+        }
+        effectsRef.current = effectsRef.current.slice(-18);
+      }
       enemiesRef.current = enemiesRef.current.filter((item) => item.id !== id);
       grantKill(now);
     }
@@ -907,7 +945,7 @@ function KingshotBattle({
   ).current;
 
   const publish = (time: number) => {
-    if (time - lastPublishRef.current < 16) return;
+    if (time - lastPublishRef.current < KINGSHOT_PUBLISH_MS) return;
     lastPublishRef.current = time;
 
     setScene({
@@ -916,6 +954,7 @@ function KingshotBattle({
       towers: towersRef.current.map((tower) => ({ ...tower })),
       arrows: arrowsRef.current.map((arrow) => ({ ...arrow })),
       swordsmen: swordsmenRef.current.map((unit) => ({ ...unit })),
+      effects: effectsRef.current.map((effect) => ({ ...effect })),
       baseHp: baseHpRef.current,
       baseMaxHp: levelConfig.baseHp,
       credits: creditsRef.current,
@@ -950,7 +989,9 @@ function KingshotBattle({
           x: clamp(playerRef.current.x + joy.x * heroSpeed * dt, 18, mapWidth - 18),
           y: clamp(playerRef.current.y + joy.y * heroSpeed * dt, 20, mapHeight - 58),
         };
+        if (Math.abs(joy.x) > 0.08) playerFacing.setValue(joy.x < 0 ? -1 : 1);
       }
+      playerRender.setValue({ x: playerRef.current.x - 21, y: playerRef.current.y - 21 });
 
       if (phaseRef.current === "break") {
         if (now >= breakUntilRef.current) {
@@ -992,16 +1033,20 @@ function KingshotBattle({
 
       // Hero combat. Archer is ranged; Hunter is intentionally the stronger class.
       if (now >= heroAttackAtRef.current && enemiesRef.current.length > 0) {
-        const targets = enemiesRef.current
-          .map((enemy) => ({ enemy, d: distance(playerRef.current, enemy) }))
-          .sort((a, b) => a.d - b.d);
+        let nearestEnemy: Enemy | null = null;
+        let nearestDistance = Infinity;
+        for (const enemy of enemiesRef.current) {
+          const d = distance(playerRef.current, enemy);
+          if (d < nearestDistance) {
+            nearestDistance = d;
+            nearestEnemy = enemy;
+          }
+        }
 
-        const nearest = targets[0];
-
-        if (heroClass === "archer" && nearest && nearest.d <= 165) {
+        if (heroClass === "archer" && nearestEnemy && nearestDistance <= 165) {
           const direction = normalize(
-            nearest.enemy.x - playerRef.current.x,
-            nearest.enemy.y - playerRef.current.y,
+            nearestEnemy.x - playerRef.current.x,
+            nearestEnemy.y - playerRef.current.y,
           );
 
           arrowsRef.current.push({
@@ -1012,13 +1057,13 @@ function KingshotBattle({
             vy: direction.y * 285,
             age: 0,
             damage: 1,
-            targetId: nearest.enemy.id,
+            targetId: nearestEnemy.id,
             owner: "hero",
           });
 
           heroAttackAtRef.current = now + 480;
-        } else if (heroClass === "hunter" && nearest && nearest.d <= 54) {
-          damageEnemy(nearest.enemy.id, 2.6, now);
+        } else if (heroClass === "hunter" && nearestEnemy && nearestDistance <= 54) {
+          damageEnemy(nearestEnemy.id, 2.6, now);
           heroAttackAtRef.current = now + 360;
         }
       }
@@ -1027,9 +1072,11 @@ function KingshotBattle({
       towersRef.current.forEach((tower) => {
         if (tower.kind !== "archer" || now < tower.cooldown) return;
 
-        const target = enemiesRef.current
-          .filter((enemy) => distance(tower, enemy) <= 230)
-          .sort((a, b) => b.progress - a.progress)[0];
+        let target: Enemy | null = null;
+        for (const enemy of enemiesRef.current) {
+          if (distance(tower, enemy) > 230) continue;
+          if (!target || enemy.progress > target.progress) target = enemy;
+        }
 
         if (!target) return;
 
@@ -1049,7 +1096,13 @@ function KingshotBattle({
         tower.cooldown = now + 285;
       });
 
-      // Swordsman houses maintain exactly four reusable runners each.
+      // Swordsman houses maintain four reusable runners. Target selection is
+      // a single linear pass instead of repeated filter/sort allocations.
+      const reservedTargets = new Set<number>();
+      for (const unit of swordsmenRef.current) {
+        if (unit.targetId !== null) reservedTargets.add(unit.targetId);
+      }
+
       towersRef.current
         .filter((tower) => tower.kind === "swordsman")
         .forEach((tower) => {
@@ -1071,32 +1124,27 @@ function KingshotBattle({
               swordsmenRef.current.push(unit);
             }
 
-            if (unit.targetId === null && now >= unit.respawnAt) {
-              const reservedTargets = new Set(
-                swordsmenRef.current
-                  .filter((item) => item.targetId !== null)
-                  .map((item) => item.targetId as number),
-              );
+            if (unit.targetId !== null || now < unit.respawnAt) continue;
 
-              const candidates = enemiesRef.current
-                .filter(
-                  (enemy) =>
-                    distance(tower, enemy) <= 285 &&
-                    !reservedTargets.has(enemy.id),
-                )
-                .sort((a, b) => {
-                  if (a.kind === "swordsman" && b.kind !== "swordsman") return -1;
-                  if (b.kind === "swordsman" && a.kind !== "swordsman") return 1;
-                  return b.progress - a.progress;
-                });
+            let preferred: Enemy | null = null;
+            let fallback: Enemy | null = null;
 
-              const target = candidates[0];
+            for (const enemy of enemiesRef.current) {
+              if (reservedTargets.has(enemy.id) || distance(tower, enemy) > 285) continue;
 
-              if (target) {
-                unit.targetId = target.id;
-                unit.x = tower.x;
-                unit.y = tower.y;
+              if (enemy.kind === "swordsman") {
+                if (!preferred || enemy.progress > preferred.progress) preferred = enemy;
+              } else if (!fallback || enemy.progress > fallback.progress) {
+                fallback = enemy;
               }
+            }
+
+            const target = preferred ?? fallback;
+            if (target) {
+              unit.targetId = target.id;
+              unit.x = tower.x;
+              unit.y = tower.y;
+              reservedTargets.add(target.id);
             }
           }
         });
@@ -1163,6 +1211,10 @@ function KingshotBattle({
       arrowsRef.current = arrowsRef.current
         .filter((arrow) => !destroyedArrows.has(arrow.id))
         .slice(-36);
+
+      effectsRef.current = effectsRef.current
+        .filter((effect) => now - effect.bornAt < 1050)
+        .slice(-18);
 
       // Progress rounds only after the full spawn queue and all living enemies are gone.
       if (
@@ -1393,6 +1445,32 @@ function KingshotBattle({
             );
           })}
 
+          {scene.effects.map((effect) => {
+            const age = Math.max(0, Date.now() - effect.bornAt);
+            const life = clamp(1 - age / 1050, 0, 1);
+            const radius = 8 + effect.power * 8 + age * 0.035 * effect.power;
+            return (
+              <G key={`fx-${effect.id}`} opacity={life}>
+                <Circle cx={effect.x} cy={effect.y} r={radius} fill={`${activeTone.accent}22`} stroke={activeTone.accent} strokeWidth={2 + effect.power * 0.45} />
+                {[0,1,2,3,4,5,6,7].map((ray) => {
+                  const angle = ray * Math.PI / 4;
+                  return (
+                    <Line
+                      key={ray}
+                      x1={effect.x + Math.cos(angle) * radius * 0.65}
+                      y1={effect.y + Math.sin(angle) * radius * 0.65}
+                      x2={effect.x + Math.cos(angle) * radius * (1.1 + effect.power * 0.16)}
+                      y2={effect.y + Math.sin(angle) * radius * (1.1 + effect.power * 0.16)}
+                      stroke={ray % 2 ? activeTone.fg : activeTone.accent}
+                      strokeWidth={1.2 + effect.power * 0.35}
+                      strokeLinecap="round"
+                    />
+                  );
+                })}
+              </G>
+            );
+          })}
+
           {scene.enemies.map((enemy) => {
             const radius = enemy.kind === "boss" ? 17 : enemy.kind === "miniboss" ? 12 : 7;
             const fill = enemy.kind === "boss" ? activeTone.fg : activeTone.muted;
@@ -1432,24 +1510,23 @@ function KingshotBattle({
             );
           })}
 
-          {heroClass === "archer" ? (
-            <Circle
-              cx={scene.player.x}
-              cy={scene.player.y}
-              r={11}
-              fill={activeTone.accent}
-              stroke={activeTone.fg}
-              strokeWidth={2}
-            />
-          ) : (
-            <Polygon
-              points={`${scene.player.x},${scene.player.y - 13} ${scene.player.x + 11},${scene.player.y + 10} ${scene.player.x - 11},${scene.player.y + 10}`}
-              fill={activeTone.accent}
-              stroke={activeTone.fg}
-              strokeWidth={2}
-            />
-          )}
         </Svg>
+
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.playerSpriteWrap,
+            {
+              transform: [
+                { translateX: playerRender.x },
+                { translateY: playerRender.y },
+                { scaleX: playerFacing },
+              ],
+            },
+          ]}
+        >
+          <Image source={PLAYER_SPRITES[heroClass]} resizeMode="contain" fadeDuration={0} style={styles.playerSprite} />
+        </Animated.View>
 
         <View
           {...joystickPan.panHandlers}
@@ -1736,6 +1813,20 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     overflow: "hidden",
+  },
+  playerSpriteWrap: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    width: 42,
+    height: 42,
+    zIndex: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  playerSprite: {
+    width: 42,
+    height: 42,
   },
   joystick: {
     position: "absolute",

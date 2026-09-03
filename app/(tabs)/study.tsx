@@ -7,6 +7,7 @@ import {
   Alert,
   Animated,
   Easing,
+  Image,
   Keyboard,
   KeyboardAvoidingView,
   Linking,
@@ -29,6 +30,7 @@ import LiquidGlassView from "@/components/ui/LiquidGlassView";
 import PageBackground from "@/components/ui/PageBackground";
 import { useTheme } from "@/contexts/ThemeContext";
 import { hapticsImpact } from "@/utils/haptics";
+import { getSchoolETA, isTeachAssistNativeAvailable, type SchoolETA } from "@/modules/teachassist-native";
 
 type StudyTool =
   | "textbooks"
@@ -102,11 +104,28 @@ type StudyNote = {
   updatedAt: string;
 };
 
+type SchoolMapMarker = {
+  id: string;
+  floorId: "ground" | "second";
+  floor: string;
+  room: string;
+  teacher: string;
+  x: number;
+  y: number;
+};
+
 const TEXTBOOKS_KEY = "study_textbooks_v1";
 const FLASHCARDS_KEY = "study_flashcards_v1";
 const BLOCK_RULES_KEY = "study_block_rules_v1";
 const NOTE_FOLDERS_KEY = "study_note_folders_v1";
 const NOTES_KEY = "study_notes_v1";
+const SCHOOL_MAP_MARKERS_KEY = "study_school_map_markers_v1";
+const SCHOOL_MAPS = [
+  { id: "ground" as const, floor: "Ground Floor", source: require("../../assets/school-map/ground-floor.jpg") },
+  { id: "second" as const, floor: "Second Floor", source: require("../../assets/school-map/second-floor.jpg") },
+];
+const SCHOOL_MAP_ASPECT = 1122 / 1402;
+
 
 const FOCUS_PRESETS: FocusPreset[] = [
   {
@@ -179,6 +198,8 @@ const STUDY_TOOLS = [
     icon: "calculate" as const,
   },
 ];
+
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
 const uid = (prefix: string) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -866,15 +887,273 @@ function TextbookLibrary() {
 }
 
 function SchoolMap() {
+  const { activeTone, isDark } = useTheme();
+  const { width } = useWindowDimensions();
+  const textColor = isDark ? "#edebea" : "#2f3035";
+  const pageWidth = Math.max(280, width - 40);
+  const mapHeight = pageWidth / SCHOOL_MAP_ASPECT;
+
+  const [markers, setMarkers] = useState<SchoolMapMarker[]>([]);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [draftPoint, setDraftPoint] = useState<{ floorId: "ground" | "second"; x: number; y: number } | null>(null);
+  const [room, setRoom] = useState("");
+  const [teacher, setTeacher] = useState("");
+  const [eta, setEta] = useState<SchoolETA | null>(null);
+  const [etaLoading, setEtaLoading] = useState(false);
+  const [etaError, setEtaError] = useState<string | null>(null);
+  const floorPagerRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    AsyncStorage.getItem(SCHOOL_MAP_MARKERS_KEY)
+      .then((raw) => {
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) setMarkers(parsed);
+      })
+      .catch((error) => console.warn("[SchoolMap] marker load failed", error));
+  }, []);
+
+  const persistMarkers = async (next: SchoolMapMarker[]) => {
+    setMarkers(next);
+    await AsyncStorage.setItem(SCHOOL_MAP_MARKERS_KEY, JSON.stringify(next));
+  };
+
+  const beginMarker = (floorId: "ground" | "second", x: number, y: number) => {
+    setDraftPoint({
+      floorId,
+      x: clamp(x / pageWidth, 0.02, 0.98),
+      y: clamp(y / mapHeight, 0.02, 0.98),
+    });
+    setRoom("");
+    setTeacher("");
+    hapticsImpact(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const saveMarker = async () => {
+    if (!draftPoint || !room.trim()) {
+      Alert.alert("Room number required", "Enter a room number or room name for this marker.");
+      return;
+    }
+
+    const floor = SCHOOL_MAPS.find((item) => item.id === draftPoint.floorId)?.floor ?? "School";
+    const next: SchoolMapMarker = {
+      id: uid("school-marker"),
+      floorId: draftPoint.floorId,
+      floor,
+      room: room.trim(),
+      teacher: teacher.trim(),
+      x: draftPoint.x,
+      y: draftPoint.y,
+    };
+
+    await persistMarkers([...markers, next]);
+    setDraftPoint(null);
+    setRoom("");
+    setTeacher("");
+  };
+
+  const openMarker = (marker: SchoolMapMarker) => {
+    Alert.alert(
+      marker.room,
+      `${marker.floor}${marker.teacher ? `\nTeacher: ${marker.teacher}` : ""}`,
+      [
+        { text: "Close", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => persistMarkers(markers.filter((item) => item.id !== marker.id)),
+        },
+      ],
+    );
+  };
+
+  const loadETA = async () => {
+    if (!isTeachAssistNativeAvailable()) {
+      setEtaError("Driving ETA requires the new native TeachAssist+ build.");
+      return;
+    }
+
+    setEtaLoading(true);
+    setEtaError(null);
+    try {
+      setEta(await getSchoolETA());
+    } catch (error) {
+      console.warn("[SchoolMap] ETA failed", error);
+      setEtaError("Could not calculate ETA. Check Location permission and your internet connection.");
+    } finally {
+      setEtaLoading(false);
+    }
+  };
+
+  const openMaps = () => {
+    Linking.openURL(
+      "http://maps.apple.com/?daddr=50%20Springside%20Rd%2C%20Vaughan%2C%20ON&dirflg=d",
+    ).catch(() => {});
+  };
+
+  const etaMinutes = eta ? Math.max(1, Math.round(eta.seconds / 60)) : null;
+  const arrival = eta?.expectedArrivalISO
+    ? new Date(eta.expectedArrivalISO).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    : null;
+
   return (
     <View style={styles.panelBody}>
-      <View style={styles.centeredPanel}>
-        <EmptyState
-          icon="map"
-          title="School map is ready for your floor plans"
-          body="The map shell is in place. Room markers, teachers, and room details will be added when you provide the marked school maps."
-        />
-      </View>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.schoolMapContent}>
+        <LiquidGlassView
+          className="rounded-2xl overflow-hidden"
+          fallbackBackgroundColor={activeTone.bg3}
+          glassTintColor={activeTone.bg2}
+          glassEffectStyle="clear"
+        >
+          <View style={styles.schoolEtaCard}>
+            <View style={[styles.schoolEtaIcon, { backgroundColor: activeTone.bg4 }]}>
+              <MaterialIcons name="directions-car" size={25} color={activeTone.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.toolTitle, { color: textColor }]}>Maple High School</Text>
+              <Text style={[styles.toolSubtitle, { color: activeTone.muted }]}>50 Springside Rd, Vaughan</Text>
+              {eta ? (
+                <Text style={[styles.schoolEtaValue, { color: activeTone.accent }]}>
+                  {etaMinutes} min • {(eta.distanceMeters / 1000).toFixed(1)} km{arrival ? ` • arrive ${arrival}` : ""}
+                </Text>
+              ) : etaError ? (
+                <Text style={[styles.schoolEtaError, { color: activeTone.muted }]}>{etaError}</Text>
+              ) : null}
+            </View>
+            <View style={styles.schoolEtaButtons}>
+              <Pressable onPress={loadETA} disabled={etaLoading} style={[styles.schoolEtaButton, { backgroundColor: activeTone.accent, opacity: etaLoading ? 0.55 : 1 }]}>
+                <MaterialIcons name={etaLoading ? "hourglass-top" : "schedule"} size={18} color={isDark ? "#111113" : "#fff"} />
+              </Pressable>
+              <Pressable onPress={openMaps} style={[styles.schoolEtaButton, { backgroundColor: activeTone.bg4 }]}>
+                <MaterialIcons name="navigation" size={18} color={activeTone.accent} />
+              </Pressable>
+            </View>
+          </View>
+        </LiquidGlassView>
+
+        <Text style={[styles.schoolMapHint, { color: activeTone.muted }]}>Swipe between floors. Tap anywhere on a floor plan to add a room marker.</Text>
+
+        <View style={styles.schoolFloorTabs}>
+          {SCHOOL_MAPS.map((floor, index) => (
+            <Pressable
+              key={floor.id}
+              onPress={() => {
+                setPageIndex(index);
+                floorPagerRef.current?.scrollTo({ x: index * pageWidth, animated: true });
+              }}
+              style={[
+                styles.schoolFloorTab,
+                {
+                  backgroundColor: pageIndex === index ? activeTone.accent : activeTone.bg3,
+                  borderColor: pageIndex === index ? activeTone.accent : activeTone.border,
+                },
+              ]}
+            >
+              <Text style={{ color: pageIndex === index ? (isDark ? "#111113" : "#fff") : textColor, fontSize: 11, fontWeight: "900" }}>{floor.floor}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <ScrollView
+          ref={floorPagerRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          contentOffset={{ x: pageIndex * pageWidth, y: 0 }}
+          onMomentumScrollEnd={(event) => {
+            setPageIndex(Math.round(event.nativeEvent.contentOffset.x / pageWidth));
+          }}
+          style={{ width: pageWidth }}
+        >
+          {SCHOOL_MAPS.map((floor) => (
+            <Pressable
+              key={floor.id}
+              onPress={(event) => beginMarker(floor.id, event.nativeEvent.locationX, event.nativeEvent.locationY)}
+              style={[
+                styles.schoolMapPage,
+                { width: pageWidth, height: mapHeight, borderColor: activeTone.border, backgroundColor: activeTone.bg3 },
+              ]}
+            >
+              <Image source={floor.source} resizeMode="contain" style={StyleSheet.absoluteFillObject} />
+
+              {markers
+                .filter((marker) => marker.floorId === floor.id)
+                .map((marker) => (
+                  <Pressable
+                    key={marker.id}
+                    onPress={(event) => {
+                      event.stopPropagation?.();
+                      openMarker(marker);
+                    }}
+                    style={[
+                      styles.schoolMarker,
+                      {
+                        left: marker.x * pageWidth - 14,
+                        top: marker.y * mapHeight - 14,
+                        backgroundColor: activeTone.accent,
+                        borderColor: isDark ? "#111113" : "#fff",
+                      },
+                    ]}
+                  >
+                    <Text style={{ color: isDark ? "#111113" : "#fff", fontSize: 8, fontWeight: "900" }} numberOfLines={1}>
+                      {marker.room}
+                    </Text>
+                  </Pressable>
+                ))}
+            </Pressable>
+          ))}
+        </ScrollView>
+
+        <View style={styles.schoolMapDots}>
+          {SCHOOL_MAPS.map((floor, index) => (
+            <View key={floor.id} style={[styles.schoolMapDot, { backgroundColor: pageIndex === index ? activeTone.accent : activeTone.border }]} />
+          ))}
+        </View>
+      </ScrollView>
+
+      <Modal visible={!!draftPoint} transparent animationType="fade" onRequestClose={() => setDraftPoint(null)}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.schoolMarkerModalBackdrop}>
+          <LiquidGlassView
+            containerClassName="w-full max-w-md"
+            className="rounded-2xl overflow-hidden"
+            fallbackBackgroundColor={activeTone.bg3}
+            glassTintColor={activeTone.bg2}
+            glassEffectStyle="regular"
+          >
+            <View style={styles.schoolMarkerEditor}>
+              <Text style={[styles.schoolMarkerEditorTitle, { color: textColor }]}>Add map marker</Text>
+              <Text style={[styles.schoolMarkerEditorFloor, { color: activeTone.muted }]}>
+                {SCHOOL_MAPS.find((item) => item.id === draftPoint?.floorId)?.floor ?? "Floor"}
+              </Text>
+              <TextInput
+                value={room}
+                onChangeText={setRoom}
+                placeholder="Room number / room name"
+                placeholderTextColor={activeTone.muted}
+                returnKeyType="next"
+                style={[styles.schoolMarkerInput, { color: textColor, backgroundColor: activeTone.bg2, borderColor: activeTone.border }]}
+              />
+              <TextInput
+                value={teacher}
+                onChangeText={setTeacher}
+                placeholder="Teacher (optional)"
+                placeholderTextColor={activeTone.muted}
+                returnKeyType="done"
+                onSubmitEditing={Keyboard.dismiss}
+                style={[styles.schoolMarkerInput, { color: textColor, backgroundColor: activeTone.bg2, borderColor: activeTone.border }]}
+              />
+              <View style={styles.schoolMarkerEditorButtons}>
+                <Pressable onPress={() => setDraftPoint(null)} style={[styles.schoolMarkerEditorButton, { backgroundColor: activeTone.bg4 }]}>
+                  <Text style={{ color: textColor, fontWeight: "900" }}>Cancel</Text>
+                </Pressable>
+                <Pressable onPress={saveMarker} style={[styles.schoolMarkerEditorButton, { backgroundColor: activeTone.accent }]}>
+                  <Text style={{ color: isDark ? "#111113" : "#fff", fontWeight: "900" }}>Save</Text>
+                </Pressable>
+              </View>
+            </View>
+          </LiquidGlassView>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -4016,6 +4295,132 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 60,
+  },
+
+  schoolMapContent: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 70,
+  },
+  schoolEtaCard: {
+    minHeight: 98,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+  },
+  schoolEtaIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  schoolEtaValue: {
+    fontSize: 11,
+    fontWeight: "900",
+    marginTop: 5,
+  },
+  schoolEtaError: {
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 5,
+  },
+  schoolEtaButtons: {
+    gap: 6,
+  },
+  schoolEtaButton: {
+    width: 37,
+    height: 37,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  schoolMapHint: {
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 13,
+    marginBottom: 10,
+    paddingHorizontal: 2,
+  },
+  schoolFloorTabs: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 10,
+  },
+  schoolFloorTab: {
+    flex: 1,
+    minHeight: 38,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  schoolMapPage: {
+    borderRadius: 18,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  schoolMarker: {
+    position: "absolute",
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 2,
+    zIndex: 20,
+  },
+  schoolMapDots: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 6,
+    marginTop: 10,
+  },
+  schoolMapDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+  },
+  schoolMarkerModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,.55)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  schoolMarkerEditor: {
+    padding: 18,
+  },
+  schoolMarkerEditorTitle: {
+    fontSize: 21,
+    fontWeight: "900",
+  },
+  schoolMarkerEditorFloor: {
+    fontSize: 11,
+    marginTop: 3,
+    marginBottom: 12,
+  },
+  schoolMarkerInput: {
+    minHeight: 48,
+    borderRadius: 13,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    marginTop: 9,
+  },
+  schoolMarkerEditorButtons: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 15,
+  },
+  schoolMarkerEditorButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   centeredPanel: {
